@@ -576,32 +576,35 @@ function App() {
                 <button className="btn-secondary" onClick={leaveRoom}>离开房间</button>
               </div>
 
-              <div className="room-status-controls">
-                <span>房间状态:</span>
-                <div className="status-buttons">
-                  <button
-                    className={`status-btn ${currentRoom.status === 'matching' ? 'active' : ''}`}
-                    style={{ backgroundColor: statusColors.matching }}
-                    onClick={() => changeRoomStatus('matching')}
-                  >
-                    匹配中
-                  </button>
-                  <button
-                    className={`status-btn ${currentRoom.status === 'gaming' ? 'active' : ''}`}
-                    style={{ backgroundColor: statusColors.gaming }}
-                    onClick={() => changeRoomStatus('gaming')}
-                  >
-                    游戏中
-                  </button>
-                  <button
-                    className={`status-btn ${currentRoom.status === 'idle' ? 'active' : ''}`}
-                    style={{ backgroundColor: statusColors.idle }}
-                    onClick={() => changeRoomStatus('idle')}
-                  >
-                    空闲
-                  </button>
+              {/* 只有子房间才显示状态按钮，大厅不显示 */}
+              {!currentRoom.isDefault && (
+                <div className="room-status-controls">
+                  <span>房间状态:</span>
+                  <div className="status-buttons">
+                    <button
+                      className={`status-btn ${currentRoom.status === 'matching' ? 'active' : ''}`}
+                      style={{ backgroundColor: statusColors.matching }}
+                      onClick={() => changeRoomStatus('matching')}
+                    >
+                      匹配中
+                    </button>
+                    <button
+                      className={`status-btn ${currentRoom.status === 'gaming' ? 'active' : ''}`}
+                      style={{ backgroundColor: statusColors.gaming }}
+                      onClick={() => changeRoomStatus('gaming')}
+                    >
+                      游戏中
+                    </button>
+                    <button
+                      className={`status-btn ${currentRoom.status === 'idle' ? 'active' : ''}`}
+                      style={{ backgroundColor: statusColors.idle }}
+                      onClick={() => changeRoomStatus('idle')}
+                    >
+                      空闲
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div className="room-users-list">
                 <h3>在线用户 ({roomUsers.length})</h3>
