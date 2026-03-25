@@ -536,7 +536,7 @@ function App() {
                 <div
                   key={room.id}
                   className={`room-card ${currentRoom?.id === room.id ? 'active' : ''}`}
-                  style={{ backgroundColor: statusColors[room.status] || statusColors.default }}
+                  style={{ backgroundColor: room.isDefault ? statusColors.default : (statusColors[room.status] || statusColors.default) }}
                   onClick={() => handleRoomClick(room)}
                   onDoubleClick={() => handleRoomDoubleClick(room)}
                 >
