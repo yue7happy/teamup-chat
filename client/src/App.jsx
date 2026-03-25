@@ -8,7 +8,8 @@ const statusColors = {
   matching: '#ea4335',
   gaming: '#34a853',
   idle: '#1a73e8',
-  default: '#eef2f6'
+  default: '#eef2f6',
+  lobby: '#333333'
 }
 
 const statusLabels = {
@@ -536,7 +537,7 @@ function App() {
                 <div
                   key={room.id}
                   className={`room-card ${currentRoom?.id === room.id ? 'active' : ''}`}
-                  style={{ backgroundColor: room.isDefault ? statusColors.default : (statusColors[room.status] || statusColors.default) }}
+                  style={{ backgroundColor: room.isDefault ? statusColors.lobby : (statusColors[room.status] || statusColors.default) }}
                   onClick={() => handleRoomClick(room)}
                   onDoubleClick={() => handleRoomDoubleClick(room)}
                 >
