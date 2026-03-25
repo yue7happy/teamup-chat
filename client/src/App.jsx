@@ -445,12 +445,6 @@ function App() {
         <h1>聊天室</h1>
         <div className="user-info">
           <span>欢迎, {user.username} {user.role === 'owner' && '(房主)'}</span>
-          <button className="btn-secondary" onClick={() => {
-            console.log('手动关闭WebSocket连接');
-            if (socket) {
-              socket.close();
-            }
-          }}>测试断开</button>
           <button className="btn-secondary" onClick={handleLogout}>退出</button>
         </div>
       </header>
