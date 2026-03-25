@@ -73,6 +73,21 @@ function App() {
         console.log('准备发送join事件:', user)
         newSocket.emit('join', user)
         console.log('join事件已发送')
+        
+        // 尝试从sessionStorage中恢复房间状态
+        const savedRoom = sessionStorage.getItem('currentRoom')
+        if (savedRoom) {
+          try {
+            const parsedRoom = JSON.parse(savedRoom)
+            console.log('尝试恢复房间状态:', parsedRoom)
+            // 直接尝试加入房间
+            newSocket.emit('enterRoom', { roomId: parsedRoom.id, user })
+            setCurrentRoom(parsedRoom)
+          } catch (error) {
+            console.error('恢复房间状态失败:', error)
+            sessionStorage.removeItem('currentRoom')
+          }
+        }
       })
 
       newSocket.on('connect_error', (error) => {
@@ -237,6 +252,8 @@ function App() {
     
     socket.emit('enterRoom', { roomId: room.id, user })
     setCurrentRoom(room)
+    // 保存当前房间到sessionStorage
+    sessionStorage.setItem('currentRoom', JSON.stringify(room))
   }, [socket, currentRoom, user])
 
   const leaveRoom = useCallback(() => {
@@ -245,6 +262,8 @@ function App() {
     socket.emit('leaveRoom', { roomId: currentRoom.id, user })
     setCurrentRoom(null)
     setRoomUsers([])
+    // 清除sessionStorage中的房间信息
+    sessionStorage.removeItem('currentRoom')
   }, [socket, currentRoom, user])
 
   const changeRoomStatus = useCallback((status) => {
@@ -362,8 +381,9 @@ function App() {
     if (socket) {
       socket.close()
     }
-    // 清除sessionStorage中的用户信息
+    // 清除sessionStorage中的用户信息和房间信息
     sessionStorage.removeItem('user')
+    sessionStorage.removeItem('currentRoom')
     setUser(null)
     setSocket(null)
     setCurrentRoom(null)

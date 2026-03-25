@@ -331,20 +331,9 @@ io.on('connection', (socket) => {
         });
       }
       
-      // 处理房间退出
-      if (user.currentRoom) {
-        console.log('用户当前在房间:', user.currentRoom, '从房间中移除');
-        const room = data.rooms.find(r => r.id === user.currentRoom);
-        if (room) {
-          room.users = room.users.filter(u => u.id !== user.id);
-          if (room.users.length === 0 && !room.isDefault) {
-            room.status = 'idle';
-          }
-          saveData(data);
-          broadcastRooms();
-          io.to(user.currentRoom).emit('roomUsersUpdated', room.users);
-        }
-      }
+      // 注意：不要从房间中移除用户
+      // 这样用户刷新页面后可以重新加入同一房间
+      // 只有当用户明确调用leaveRoom时才从房间中移除
     }
     onlineUsers.delete(socket.id);
     console.log('用户断开连接处理完成:', socket.id);
