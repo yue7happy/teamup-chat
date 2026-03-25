@@ -307,7 +307,8 @@ body {
 }
 
 .room-card.active {
-  box-shadow: 0 0 0 4px rgba(26, 115, 232, 0.5), 0 8px 24px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  transform: scale(1.02);
 }
 
 .room-info h3 {
