@@ -60,10 +60,28 @@ function App() {
       // 保存用户信息到sessionStorage
       sessionStorage.setItem('user', JSON.stringify(user))
       
-      const newSocket = io(API_URL)
+      console.log('准备创建WebSocket连接，API_URL:', API_URL)
+      const newSocket = io(API_URL, {
+        transports: ['websocket'],
+        reconnection: false
+      })
+      console.log('WebSocket实例已创建:', newSocket)
       setSocket(newSocket)
 
-      newSocket.emit('join', user)
+      newSocket.on('connect', () => {
+        console.log('WebSocket连接已建立，socket.id:', newSocket.id)
+        console.log('准备发送join事件:', user)
+        newSocket.emit('join', user)
+        console.log('join事件已发送')
+      })
+
+      newSocket.on('connect_error', (error) => {
+        console.error('WebSocket连接错误:', error)
+      })
+
+      newSocket.on('disconnect', (reason) => {
+        console.log('WebSocket连接已断开，原因:', reason)
+      })
 
       newSocket.on('roomsUpdated', (updatedRooms) => {
         setRooms(updatedRooms)
@@ -114,7 +132,8 @@ function App() {
       fetchRooms()
 
       return () => {
-        newSocket.close()
+        // 不要主动关闭WebSocket连接，让浏览器自动处理
+        // 这样服务器能正确检测到disconnect事件
       }
     }
   }, [user])
@@ -395,6 +414,12 @@ function App() {
         <h1>聊天室</h1>
         <div className="user-info">
           <span>欢迎, {user.username} {user.role === 'owner' && '(房主)'}</span>
+          <button className="btn-secondary" onClick={() => {
+            console.log('手动关闭WebSocket连接');
+            if (socket) {
+              socket.close();
+            }
+          }}>测试断开</button>
           <button className="btn-secondary" onClick={handleLogout}>退出</button>
         </div>
       </header>

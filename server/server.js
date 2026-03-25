@@ -9,7 +9,7 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: "http://localhost:5173",
+    origin: "*",
     methods: ["GET", "POST"]
   }
 });
@@ -222,8 +222,33 @@ io.on('connection', (socket) => {
   console.log('用户连接:', socket.id);
   
   socket.on('join', (userData) => {
+    console.log('收到join事件，用户:', userData.username, 'ID:', userData.id);
     onlineUsers.set(socket.id, { ...userData, socketId: socket.id, currentRoom: null });
+    console.log('用户已添加到onlineUsers');
+    
+    // 设置用户在线状态
+    const userInData = data.users.find(u => u.id === userData.id);
+    if (userInData) {
+      console.log('找到用户数据，设置为在线');
+      userInData.online = true;
+      saveData(data);
+      console.log('数据已保存');
+      
+      // 广播用户状态更新
+      console.log('广播user_status_updated事件，用户:', userData.username, '状态: 在线');
+      io.emit('user_status_updated', {
+        id: userData.id,
+        username: userData.username,
+        role: userData.role,
+        online: true
+      });
+      console.log('事件已广播');
+    } else {
+      console.log('未找到用户数据:', userData.id);
+    }
+    
     broadcastRooms();
+    console.log('join事件处理完成');
   });
   
   socket.on('enterRoom', ({ roomId, user }) => {
@@ -285,15 +310,19 @@ io.on('connection', (socket) => {
   });
   
   socket.on('disconnect', () => {
+    console.log('检测到用户断开连接，socket.id:', socket.id);
     const user = onlineUsers.get(socket.id);
     if (user) {
+      console.log('断开连接的用户:', user.username, 'ID:', user.id);
       // 设置用户离线状态
       const userInData = data.users.find(u => u.id === user.id);
       if (userInData) {
+        console.log('找到用户数据，设置为离线');
         userInData.online = false;
         saveData(data);
         
         // 广播用户状态更新
+        console.log('广播user_status_updated事件，用户:', user.username, '状态: 离线');
         io.emit('user_status_updated', {
           id: user.id,
           username: user.username,
@@ -304,6 +333,7 @@ io.on('connection', (socket) => {
       
       // 处理房间退出
       if (user.currentRoom) {
+        console.log('用户当前在房间:', user.currentRoom, '从房间中移除');
         const room = data.rooms.find(r => r.id === user.currentRoom);
         if (room) {
           room.users = room.users.filter(u => u.id !== user.id);
@@ -317,7 +347,7 @@ io.on('connection', (socket) => {
       }
     }
     onlineUsers.delete(socket.id);
-    console.log('用户断开连接:', socket.id);
+    console.log('用户断开连接处理完成:', socket.id);
   });
 });
 
