@@ -259,12 +259,22 @@ function App() {
   const leaveRoom = useCallback(() => {
     if (!socket || !currentRoom) return
     
+    // 发送离开房间请求
     socket.emit('leaveRoom', { roomId: currentRoom.id, user })
-    setCurrentRoom(null)
-    setRoomUsers([])
-    // 清除sessionStorage中的房间信息
-    sessionStorage.removeItem('currentRoom')
-  }, [socket, currentRoom, user])
+    
+    // 找到大厅房间
+    const lobbyRoom = rooms.find(room => room.isDefault)
+    if (lobbyRoom) {
+      // 自动进入大厅
+      enterRoom(lobbyRoom)
+    } else {
+      // 如果找不到大厅，清除房间状态
+      setCurrentRoom(null)
+      setRoomUsers([])
+      // 清除sessionStorage中的房间信息
+      sessionStorage.removeItem('currentRoom')
+    }
+  }, [socket, currentRoom, user, rooms, enterRoom])
 
   const changeRoomStatus = useCallback((status) => {
     if (!socket || !currentRoom) return
