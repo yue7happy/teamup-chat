@@ -145,6 +145,17 @@ function App() {
         ))
       })
 
+      // 监听用户离开消息
+      newSocket.on('user_left', (data) => {
+        console.log('收到user_left事件:', data)
+        // 如果离开的是当前房间，更新房间用户列表
+        if (currentRoom && currentRoom.id === data.roomId) {
+          setRoomUsers(prevUsers => prevUsers.filter(u => u.id !== data.userId))
+        }
+        // 重新获取房间列表以更新人数
+        fetchRooms()
+      })
+
       fetchRooms()
 
       return () => {
@@ -389,6 +400,10 @@ function App() {
   }
 
   const handleLogout = () => {
+    if (socket && currentRoom) {
+      // 先发送离开房间请求
+      socket.emit('leaveRoom', { roomId: currentRoom.id, user })
+    }
     if (socket) {
       socket.close()
     }

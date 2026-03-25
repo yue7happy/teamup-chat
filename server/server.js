@@ -297,6 +297,13 @@ io.on('connection', (socket) => {
     saveData(data);
     broadcastRooms();
     io.to(roomId).emit('roomUsersUpdated', room.users);
+    
+    // 广播用户离开消息
+    io.emit('user_left', {
+      userId: user.id,
+      username: user.username,
+      roomId: roomId
+    });
   });
   
   socket.on('changeRoomStatus', ({ roomId, status }) => {
