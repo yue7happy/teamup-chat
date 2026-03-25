@@ -75,20 +75,50 @@ function App() {
         newSocket.emit('join', user)
         console.log('join事件已发送')
         
-        // 尝试从sessionStorage中恢复房间状态
-        const savedRoom = sessionStorage.getItem('currentRoom')
-        if (savedRoom) {
-          try {
-            const parsedRoom = JSON.parse(savedRoom)
-            console.log('尝试恢复房间状态:', parsedRoom)
-            // 直接尝试加入房间
-            newSocket.emit('enterRoom', { roomId: parsedRoom.id, user })
-            setCurrentRoom(parsedRoom)
-          } catch (error) {
-            console.error('恢复房间状态失败:', error)
-            sessionStorage.removeItem('currentRoom')
-          }
-        }
+        // 获取房间列表
+        fetch(`${API_URL}/api/rooms`)
+          .then(res => res.json())
+          .then(updatedRooms => {
+            setRooms(updatedRooms)
+            
+            // 尝试从sessionStorage中恢复房间状态
+            const savedRoom = sessionStorage.getItem('currentRoom')
+            if (savedRoom) {
+              try {
+                const parsedRoom = JSON.parse(savedRoom)
+                console.log('尝试恢复房间状态:', parsedRoom)
+                // 检查房间是否仍然存在
+                const roomExists = updatedRooms.find(r => r.id === parsedRoom.id)
+                if (roomExists) {
+                  newSocket.emit('enterRoom', { roomId: parsedRoom.id, user })
+                  setCurrentRoom(parsedRoom)
+                } else {
+                  // 房间不存在了，进入大厅
+                  const lobbyRoom = updatedRooms.find(room => room.isDefault)
+                  if (lobbyRoom) {
+                    newSocket.emit('enterRoom', { roomId: lobbyRoom.id, user })
+                    setCurrentRoom(lobbyRoom)
+                    sessionStorage.setItem('currentRoom', JSON.stringify(lobbyRoom))
+                  }
+                }
+              } catch (error) {
+                console.error('恢复房间状态失败:', error)
+                sessionStorage.removeItem('currentRoom')
+              }
+            } else {
+              // 没有保存的房间状态，进入默认大厅
+              const lobbyRoom = updatedRooms.find(room => room.isDefault)
+              if (lobbyRoom) {
+                console.log('自动进入默认大厅:', lobbyRoom)
+                newSocket.emit('enterRoom', { roomId: lobbyRoom.id, user })
+                setCurrentRoom(lobbyRoom)
+                sessionStorage.setItem('currentRoom', JSON.stringify(lobbyRoom))
+              }
+            }
+          })
+          .catch(err => {
+            console.error('获取房间列表失败:', err)
+          })
       })
 
       newSocket.on('connect_error', (error) => {

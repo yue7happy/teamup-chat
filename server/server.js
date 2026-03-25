@@ -223,6 +223,11 @@ io.on('connection', (socket) => {
   
   socket.on('join', (userData) => {
     console.log('收到join事件，用户:', userData.username, 'ID:', userData.id);
+    
+    // 注意：不在join时移除用户，保留用户在房间中的状态
+    // 客户端会根据sessionStorage决定是否重新进入房间
+    // enterRoom事件会处理房间切换逻辑
+    
     onlineUsers.set(socket.id, { ...userData, socketId: socket.id, currentRoom: null });
     console.log('用户已添加到onlineUsers');
     
@@ -256,23 +261,31 @@ io.on('connection', (socket) => {
     if (!room) return;
     
     const currentUser = onlineUsers.get(socket.id);
-    if (currentUser && currentUser.currentRoom) {
-      const oldRoom = data.rooms.find(r => r.id === currentUser.currentRoom);
-      if (oldRoom) {
-        oldRoom.users = oldRoom.users.filter(u => u.id !== user.id);
-        if (oldRoom.users.length === 0 && !oldRoom.isDefault) {
-          oldRoom.status = 'idle';
-        }
-      }
-    }
     
+    // 先从所有房间中移除该用户（确保不会同时出现在多个房间）
+    data.rooms.forEach(r => {
+      const userIndex = r.users.findIndex(u => u.id === user.id);
+      if (userIndex !== -1) {
+        r.users.splice(userIndex, 1);
+        if (r.users.length === 0 && !r.isDefault) {
+          r.status = 'idle';
+        }
+        // 通知原房间内的其他用户
+        io.to(r.id).emit('roomUsersUpdated', r.users);
+      }
+    });
+    
+    // 将用户添加到新房间
     if (!room.users.find(u => u.id === user.id)) {
       room.users.push(user);
     }
     
-    currentUser.currentRoom = roomId;
+    if (currentUser) {
+      currentUser.currentRoom = roomId;
+    }
     socket.join(roomId);
     
+    saveData(data);
     broadcastRooms();
     io.to(roomId).emit('roomUsersUpdated', room.users);
   });
