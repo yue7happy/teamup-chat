@@ -36,6 +36,8 @@ function App() {
   const [userToDelete, setUserToDelete] = useState(null)
   const [isMobile, setIsMobile] = useState(false)
   const [error, setError] = useState('')
+  const [messages, setMessages] = useState([])
+  const [messageInput, setMessageInput] = useState('')
 
   useEffect(() => {
     const checkMobile = () => {
@@ -248,6 +250,19 @@ function App() {
         fetchRooms()
       })
 
+      // 监听新消息
+      newSocket.on('new_message', (message) => {
+        console.log('收到新消息:', message)
+        setMessages(prev => [...prev, message])
+        // 自动滚动到底部
+        setTimeout(() => {
+          const chatMessages = document.querySelector('.chat-messages')
+          if (chatMessages) {
+            chatMessages.scrollTop = chatMessages.scrollHeight
+          }
+        }, 100)
+      })
+
       fetchRooms()
 
       return () => {
@@ -356,6 +371,8 @@ function App() {
     
     socket.emit('enterRoom', { roomId: room.id, user })
     setCurrentRoom(room)
+    // 清空消息列表，只显示当前房间的消息
+    setMessages([])
     // 保存当前房间到sessionStorage
     sessionStorage.setItem('currentRoom', JSON.stringify(room))
   }, [socket, currentRoom, user])
@@ -375,6 +392,7 @@ function App() {
       // 如果找不到大厅，清除房间状态
       setCurrentRoom(null)
       setRoomUsers([])
+      setMessages([])
       // 清除sessionStorage中的房间信息
       sessionStorage.removeItem('currentRoom')
     }
@@ -514,7 +532,31 @@ function App() {
     setCurrentRoom(null)
     setRoomUsers([])
     setRooms([])
+    setMessages([])
   }
+
+  const sendMessage = useCallback(() => {
+    if (!socket || !currentRoom || !messageInput.trim()) return
+    
+    const message = {
+      roomId: currentRoom.id,
+      userId: user.id,
+      username: user.username,
+      content: messageInput.trim(),
+      timestamp: new Date().toLocaleTimeString()
+    }
+    
+    socket.emit('send_message', message)
+    setMessageInput('')
+    
+    // 自动滚动到底部
+    setTimeout(() => {
+      const chatMessages = document.querySelector('.chat-messages')
+      if (chatMessages) {
+        chatMessages.scrollTop = chatMessages.scrollHeight
+      }
+    }, 100)
+  }, [socket, currentRoom, user, messageInput])
 
   if (!user) {
     return (
@@ -761,6 +803,32 @@ function App() {
                     </li>
                   ))}
                 </ul>
+              </div>
+
+              {/* 聊天功能 */}
+              <div className="chat-section">
+                <h3>聊天</h3>
+                <div className="chat-messages">
+                  {messages.map((msg, index) => (
+                    <div key={index} className={`message ${msg.userId === user.id ? 'own' : ''}`}>
+                      <div className="message-header">
+                        <span className="message-username">{msg.username}</span>
+                        <span className="message-time">{msg.timestamp}</span>
+                      </div>
+                      <div className="message-content">{msg.content}</div>
+                    </div>
+                  ))}
+                </div>
+                <div className="chat-input">
+                  <input
+                    type="text"
+                    value={messageInput}
+                    onChange={(e) => setMessageInput(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
+                    placeholder="输入消息..."
+                  />
+                  <button onClick={sendMessage}>发送</button>
+                </div>
               </div>
             </div>
           )}

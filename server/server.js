@@ -418,6 +418,12 @@ io.on('connection', (socket) => {
     io.to(roomId).emit('roomUsersUpdated', room.users);
   });
   
+  socket.on('send_message', (message) => {
+    console.log('收到消息:', message);
+    // 广播消息到房间内的所有用户
+    io.to(message.roomId).emit('new_message', message);
+  });
+
   socket.on('disconnect', () => {
     console.log('检测到用户断开连接，socket.id:', socket.id);
     const user = onlineUsers.get(socket.id);
