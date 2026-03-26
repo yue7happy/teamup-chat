@@ -653,6 +653,16 @@ function App() {
                 } else {
                   roomColor = statusColors.idle; // 蓝色
                 }
+                // 显示成员列表
+                const renderMembers = (users) => {
+                  if (!users || users.length === 0) return ''
+                  if (users.length <= 3) {
+                    return users.map(u => u.username).join('、')
+                  } else {
+                    return users.slice(0, 3).map(u => u.username).join('、') + `…+${users.length - 3}`
+                  }
+                }
+                
                 return (
                   <div
                     key={room.id}
@@ -664,6 +674,11 @@ function App() {
                     <div className="room-info">
                       <h3>{room.name}</h3>
                       <span className="room-status">{statusLabels[room.status] || '空闲'}</span>
+                      {!room.isDefault && room.users && room.users.length > 0 && (
+                        <div className="room-members">
+                          {renderMembers(room.users)}
+                        </div>
+                      )}
                     </div>
                     <div className="room-users-count">
                       <span>{room.userCount || 0} 人在线</span>
