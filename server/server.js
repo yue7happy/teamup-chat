@@ -190,24 +190,99 @@ app.delete('/api/users/:id', (req, res) => {
 app.delete('/api/rooms/:id', (req, res) => {
   const { id } = req.params;
   
-  // 不允许删除默认大厅
-  if (id === 'lobby') {
-    return res.json({ success: false, message: '无法删除默认大厅' });
+  try {
+    console.log('开始删除房间，ID:', id);
+    
+    // 不允许删除默认大厅
+    if (id === 'lobby') {
+      console.log('尝试删除默认大厅，拒绝');
+      return res.json({ success: false, message: '无法删除默认大厅' });
+    }
+    
+    const roomIndex = data.rooms.findIndex(room => room.id === id);
+    if (roomIndex === -1) {
+      console.log('房间不存在，ID:', id);
+      return res.json({ success: false, message: '房间不存在' });
+    }
+    
+    const deletedRoom = data.rooms[roomIndex];
+    console.log('找到房间:', deletedRoom.name, '用户数量:', deletedRoom.users.length);
+    
+    const roomUsers = [...deletedRoom.users]; // 保存房间内的用户
+    console.log('房间用户:', roomUsers.map(u => u.username));
+    
+    // 将房间内的所有用户移到大厅
+    const lobbyRoom = data.rooms.find(room => room.isDefault);
+    if (lobbyRoom) {
+      console.log('找到大厅:', lobbyRoom.name);
+      roomUsers.forEach(user => {
+        console.log('处理用户:', user.username, 'ID:', user.id);
+        if (!user || !user.id) {
+          console.log('无效用户对象:', user);
+          return;
+        }
+        // 检查用户是否已经在大厅中
+        const userInLobby = lobbyRoom.users.find(u => u.id === user.id);
+        if (!userInLobby) {
+          console.log('将用户', user.username, '添加到大厅');
+          lobbyRoom.users.push(user);
+        } else {
+          console.log('用户', user.username, '已经在大厅中');
+        }
+        
+        // 更新在线用户的当前房间
+        onlineUsers.forEach((onlineUser, socketId) => {
+          if (onlineUser.id === user.id) {
+            console.log('更新在线用户', onlineUser.username, '的当前房间为大厅');
+            onlineUser.currentRoom = lobbyRoom.id;
+            // 广播用户移动消息
+            io.emit('user_moved', {
+              userId: user.id,
+              username: user.username,
+              fromRoom: id,
+              toRoom: lobbyRoom.id
+            });
+          }
+        });
+      });
+    }
+    
+    // 先保存用户移动后的状态
+    console.log('保存用户移动后的状态');
+    saveData(data);
+    console.log('保存成功');
+    
+    // 然后删除房间
+    console.log('删除房间，索引:', roomIndex);
+    data.rooms.splice(roomIndex, 1);
+    console.log('房间已从内存中删除');
+    
+    // 保存删除房间后的状态
+    console.log('保存删除房间后的状态');
+    saveData(data);
+    console.log('保存成功');
+    
+    // 广播房间删除消息
+    console.log('广播房间删除消息');
+    io.emit('room_deleted', { success: true, roomId: id });
+    
+    // 广播大厅用户更新
+    if (lobbyRoom) {
+      console.log('广播大厅用户更新，用户数量:', lobbyRoom.users.length);
+      io.to(lobbyRoom.id).emit('roomUsersUpdated', lobbyRoom.users);
+    }
+    
+    // 广播房间列表更新
+    console.log('广播房间列表更新');
+    broadcastRooms();
+    
+    console.log('房间删除成功');
+    res.json({ success: true, message: '房间删除成功' });
+  } catch (error) {
+    console.error('删除房间时发生错误:', error);
+    console.error('错误堆栈:', error.stack);
+    res.json({ success: false, message: '删除房间失败' });
   }
-  
-  const roomIndex = data.rooms.findIndex(room => room.id === id);
-  if (roomIndex === -1) {
-    return res.json({ success: false, message: '房间不存在' });
-  }
-  
-  const deletedRoom = data.rooms[roomIndex];
-  data.rooms.splice(roomIndex, 1);
-  saveData(data);
-  
-  // 广播房间删除消息
-  io.emit('room_deleted', { success: true, roomId: id });
-  
-  res.json({ success: true, message: '房间删除成功' });
 });
 
 function broadcastRooms() {

@@ -147,11 +147,61 @@ function App() {
       // 监听房间删除事件
       newSocket.on('room_deleted', (data) => {
         console.log('收到room_deleted事件:', data)
-        fetchRooms()
-        // 如果当前在被删除的房间中，退出该房间
-        if (currentRoom && currentRoom.id === data.roomId) {
-          setCurrentRoom(null)
-          setRoomUsers([])
+        console.log('当前房间:', currentRoom)
+        // 重新获取房间列表
+        fetch(`${API_URL}/api/rooms`)
+          .then(res => res.json())
+          .then(updatedRooms => {
+            console.log('获取到的房间列表:', updatedRooms)
+            setRooms(updatedRooms)
+            // 只有当当前在被删除的房间中时，才切换到大厅
+            if (currentRoom && currentRoom.id === data.roomId) {
+              // 找到默认大厅房间
+              const lobbyRoom = updatedRooms.find(room => room.isDefault)
+              console.log('找到的大厅:', lobbyRoom)
+              if (lobbyRoom) {
+                console.log('当前在被删除的房间中，自动进入大厅:', lobbyRoom)
+                newSocket.emit('enterRoom', { roomId: lobbyRoom.id, user })
+                console.log('设置当前房间为大厅')
+                setCurrentRoom(lobbyRoom)
+                // 保存大厅到sessionStorage
+                sessionStorage.setItem('currentRoom', JSON.stringify(lobbyRoom))
+                console.log('保存大厅到sessionStorage')
+              }
+            }
+          })
+          .catch(err => {
+            console.error('获取房间列表失败:', err)
+          })
+      })
+
+      // 监听用户移动事件
+      newSocket.on('user_moved', (data) => {
+        console.log('收到user_moved事件:', data)
+        console.log('当前用户ID:', user?.id)
+        // 只有当移动的是当前用户时，才更新界面
+        if (data.userId === user?.id) {
+          // 重新获取房间列表
+          fetch(`${API_URL}/api/rooms`)
+            .then(res => res.json())
+            .then(updatedRooms => {
+              console.log('获取到的房间列表:', updatedRooms)
+              setRooms(updatedRooms)
+              // 找到目标房间（大厅）
+              const targetRoom = updatedRooms.find(room => room.id === data.toRoom)
+              console.log('找到的目标房间:', targetRoom)
+              if (targetRoom) {
+                console.log('当前用户被移动到:', targetRoom.name)
+                console.log('设置当前房间为目标房间')
+                setCurrentRoom(targetRoom)
+                // 保存到sessionStorage
+                sessionStorage.setItem('currentRoom', JSON.stringify(targetRoom))
+                console.log('保存目标房间到sessionStorage')
+              }
+            })
+            .catch(err => {
+              console.error('获取房间列表失败:', err)
+            })
         }
       })
 
