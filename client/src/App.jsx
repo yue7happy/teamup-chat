@@ -135,6 +135,18 @@ function App() {
 
       newSocket.on('roomUsersUpdated', (users) => {
         setRoomUsers(users)
+        // 同时更新当前房间的状态，确保状态同步
+        if (currentRoom) {
+          fetch(`${API_URL}/api/rooms`)
+            .then(res => res.json())
+            .then(updatedRooms => {
+              const updatedRoom = updatedRooms.find(r => r.id === currentRoom.id)
+              if (updatedRoom) {
+                setCurrentRoom(updatedRoom)
+                sessionStorage.setItem('currentRoom', JSON.stringify(updatedRoom))
+              }
+            })
+        }
       })
 
       // 监听用户添加成功事件
@@ -377,9 +389,9 @@ function App() {
     // 保存到sessionStorage
     sessionStorage.setItem('currentRoom', JSON.stringify(updatedRoom))
     
-    // 发送到服务器
-    socket.emit('changeRoomStatus', { roomId: currentRoom.id, status })
-  }, [socket, currentRoom])
+    // 发送到服务器，包含用户信息
+    socket.emit('changeRoomStatus', { roomId: currentRoom.id, status, user })
+  }, [socket, currentRoom, user])
 
   const handleRoomClick = (room) => {
     if (isMobile) {
@@ -629,36 +641,49 @@ function App() {
           </div>
 
             <div className="rooms-grid">
-              {rooms.map((room) => (
-                <div
-                  key={room.id}
-                  className={`room-card ${currentRoom?.id === room.id ? 'active' : ''}`}
-                  style={{ backgroundColor: room.isDefault ? statusColors.lobby : (statusColors[room.status] || statusColors.default) }}
-                  onClick={() => handleRoomClick(room)}
-                  onDoubleClick={() => handleRoomDoubleClick(room)}
-                >
-                  <div className="room-info">
-                    <h3>{room.name}</h3>
-                    <span className="room-status">{statusLabels[room.status] || '空闲'}</span>
+              {rooms.map((room) => {
+                // 按房间状态计算颜色
+                let roomColor = statusColors.default;
+                if (room.isDefault) {
+                  roomColor = statusColors.lobby;
+                } else if (room.status === 'matching') {
+                  roomColor = statusColors.matching; // 红色
+                } else if (room.status === 'gaming') {
+                  roomColor = statusColors.gaming; // 绿色
+                } else {
+                  roomColor = statusColors.idle; // 蓝色
+                }
+                return (
+                  <div
+                    key={room.id}
+                    className={`room-card ${currentRoom?.id === room.id ? 'active' : ''}`}
+                    style={{ backgroundColor: roomColor }}
+                    onClick={() => handleRoomClick(room)}
+                    onDoubleClick={() => handleRoomDoubleClick(room)}
+                  >
+                    <div className="room-info">
+                      <h3>{room.name}</h3>
+                      <span className="room-status">{statusLabels[room.status] || '空闲'}</span>
+                    </div>
+                    <div className="room-users-count">
+                      <span>{room.userCount || 0} 人在线</span>
+                    </div>
+                    {room.isDefault && <span className="default-badge">大厅</span>}
+                    {showDeleteRoom && !room.isDefault && (user.role === 'owner' || user.role === 'admin') && (
+                      <button 
+                        className="delete-room-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteRoom(room.id, room.name);
+                        }}
+                        title="删除房间"
+                      >
+                        ×
+                      </button>
+                    )}
                   </div>
-                  <div className="room-users-count">
-                    <span>{room.userCount || 0} 人在线</span>
-                  </div>
-                  {room.isDefault && <span className="default-badge">大厅</span>}
-                  {showDeleteRoom && !room.isDefault && (user.role === 'owner' || user.role === 'admin') && (
-                    <button 
-                      className="delete-room-btn"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteRoom(room.id, room.name);
-                      }}
-                      title="删除房间"
-                    >
-                      ×
-                    </button>
-                  )}
-                </div>
-              ))}
+                )
+              })}
             </div>
 
             <p className="interaction-hint">
@@ -678,27 +703,36 @@ function App() {
                 <div className="room-status-controls">
                   <span>房间状态:</span>
                   <div className="status-buttons">
-                    <button
-                      className={`status-btn ${currentRoom.status === 'matching' ? 'active' : ''}`}
-                      style={{ backgroundColor: currentRoom.status === 'matching' ? statusColors.matching : '#999999' }}
-                      onClick={() => changeRoomStatus('matching')}
-                    >
-                      匹配中
-                    </button>
-                    <button
-                      className={`status-btn ${currentRoom.status === 'gaming' ? 'active' : ''}`}
-                      style={{ backgroundColor: currentRoom.status === 'gaming' ? statusColors.gaming : '#999999' }}
-                      onClick={() => changeRoomStatus('gaming')}
-                    >
-                      游戏中
-                    </button>
-                    <button
-                      className={`status-btn ${currentRoom.status === 'idle' ? 'active' : ''}`}
-                      style={{ backgroundColor: currentRoom.status === 'idle' ? statusColors.idle : '#999999' }}
-                      onClick={() => changeRoomStatus('idle')}
-                    >
-                      空闲
-                    </button>
+                    {/* 找到当前用户在房间中的状态 */}
+                    {(() => {
+                      const currentUserInRoom = roomUsers.find(u => u.id === user.id);
+                      const userStatus = currentUserInRoom ? currentUserInRoom.status : 'idle';
+                      return (
+                        <>
+                          <button
+                            className={`status-btn ${userStatus === 'matching' ? 'active' : ''}`}
+                            style={{ backgroundColor: userStatus === 'matching' ? statusColors.matching : '#999999' }}
+                            onClick={() => changeRoomStatus('matching')}
+                          >
+                            匹配中
+                          </button>
+                          <button
+                            className={`status-btn ${userStatus === 'gaming' ? 'active' : ''}`}
+                            style={{ backgroundColor: userStatus === 'gaming' ? statusColors.gaming : '#999999' }}
+                            onClick={() => changeRoomStatus('gaming')}
+                          >
+                            游戏中
+                          </button>
+                          <button
+                            className={`status-btn ${userStatus === 'idle' ? 'active' : ''}`}
+                            style={{ backgroundColor: userStatus === 'idle' ? statusColors.idle : '#999999' }}
+                            onClick={() => changeRoomStatus('idle')}
+                          >
+                            空闲
+                          </button>
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
               )}

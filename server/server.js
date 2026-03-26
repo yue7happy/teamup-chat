@@ -352,7 +352,9 @@ io.on('connection', (socket) => {
     
     // 将用户添加到新房间
     if (!room.users.find(u => u.id === user.id)) {
-      room.users.push(user);
+      // 确保用户对象包含status属性
+      const userWithStatus = { ...user, status: user.status || 'idle' };
+      room.users.push(userWithStatus);
     }
     
     if (currentUser) {
@@ -373,6 +375,10 @@ io.on('connection', (socket) => {
     
     if (room.users.length === 0 && !room.isDefault) {
       room.status = 'idle';
+    } else if (room.users.length > 0 && !room.isDefault) {
+      // 房间状态已经由用户通过 changeRoomStatus 设置
+      // 保持当前状态不变
+      console.log('房间', room.name, '当前状态:', room.status);
     }
     
     const currentUser = onlineUsers.get(socket.id);
@@ -394,14 +400,22 @@ io.on('connection', (socket) => {
     });
   });
   
-  socket.on('changeRoomStatus', ({ roomId, status }) => {
+  socket.on('changeRoomStatus', ({ roomId, status, user }) => {
     const room = data.rooms.find(r => r.id === roomId);
     if (!room) return;
     
     room.status = status;
+    
+    // 当任意用户点击状态按钮时，更新房间内所有在线用户的状态
+    room.users.forEach(userInRoom => {
+      userInRoom.status = status;
+    });
+    
     saveData(data);
     
     broadcastRooms();
+    // 通知房间内的其他用户
+    io.to(roomId).emit('roomUsersUpdated', room.users);
   });
   
   socket.on('disconnect', () => {
@@ -432,9 +446,15 @@ io.on('connection', (socket) => {
         if (userIndex !== -1) {
           console.log('从房间', room.name, '中移除用户', user.username);
           room.users.splice(userIndex, 1);
+          
           if (room.users.length === 0 && !room.isDefault) {
             room.status = 'idle';
+          } else if (room.users.length > 0 && !room.isDefault) {
+            // 房间状态已经由用户通过 changeRoomStatus 设置
+            // 保持当前状态不变
+            console.log('房间', room.name, '当前状态:', room.status);
           }
+          
           // 广播用户离开消息
           io.emit('user_left', {
             userId: user.id,
