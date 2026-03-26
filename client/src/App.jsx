@@ -371,6 +371,13 @@ function App() {
   const changeRoomStatus = useCallback((status) => {
     if (!socket || !currentRoom) return
     
+    // 立即更新本地状态，让按钮颜色立即变化
+    const updatedRoom = { ...currentRoom, status }
+    setCurrentRoom(updatedRoom)
+    // 保存到sessionStorage
+    sessionStorage.setItem('currentRoom', JSON.stringify(updatedRoom))
+    
+    // 发送到服务器
     socket.emit('changeRoomStatus', { roomId: currentRoom.id, status })
   }, [socket, currentRoom])
 
@@ -673,21 +680,21 @@ function App() {
                   <div className="status-buttons">
                     <button
                       className={`status-btn ${currentRoom.status === 'matching' ? 'active' : ''}`}
-                      style={{ backgroundColor: statusColors.matching }}
+                      style={{ backgroundColor: currentRoom.status === 'matching' ? statusColors.matching : '#999999' }}
                       onClick={() => changeRoomStatus('matching')}
                     >
                       匹配中
                     </button>
                     <button
                       className={`status-btn ${currentRoom.status === 'gaming' ? 'active' : ''}`}
-                      style={{ backgroundColor: statusColors.gaming }}
+                      style={{ backgroundColor: currentRoom.status === 'gaming' ? statusColors.gaming : '#999999' }}
                       onClick={() => changeRoomStatus('gaming')}
                     >
                       游戏中
                     </button>
                     <button
                       className={`status-btn ${currentRoom.status === 'idle' ? 'active' : ''}`}
-                      style={{ backgroundColor: statusColors.idle }}
+                      style={{ backgroundColor: currentRoom.status === 'idle' ? statusColors.idle : '#999999' }}
                       onClick={() => changeRoomStatus('idle')}
                     >
                       空闲

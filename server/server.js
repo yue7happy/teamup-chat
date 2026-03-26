@@ -426,9 +426,30 @@ io.on('connection', (socket) => {
         });
       }
       
-      // 注意：不要从房间中移除用户
-      // 这样用户刷新页面后可以重新加入同一房间
-      // 只有当用户明确调用leaveRoom时才从房间中移除
+      // 从所有房间中移除该用户
+      data.rooms.forEach(room => {
+        const userIndex = room.users.findIndex(u => u.id === user.id);
+        if (userIndex !== -1) {
+          console.log('从房间', room.name, '中移除用户', user.username);
+          room.users.splice(userIndex, 1);
+          if (room.users.length === 0 && !room.isDefault) {
+            room.status = 'idle';
+          }
+          // 广播用户离开消息
+          io.emit('user_left', {
+            userId: user.id,
+            username: user.username,
+            roomId: room.id
+          });
+          // 通知房间内的其他用户
+          io.to(room.id).emit('roomUsersUpdated', room.users);
+        }
+      });
+      
+      // 保存数据
+      saveData(data);
+      // 广播房间列表更新
+      broadcastRooms();
     }
     onlineUsers.delete(socket.id);
     console.log('用户断开连接处理完成:', socket.id);
