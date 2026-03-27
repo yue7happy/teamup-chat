@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import io from 'socket.io-client'
 import './App.css'
 
@@ -45,6 +45,7 @@ function App() {
   const [isDeafen, setIsDeafen] = useState(false)
   const [connections, setConnections] = useState({})
   const [remoteAudios, setRemoteAudios] = useState({})
+  const hasRestoredMicRef = useRef(false)
 
   useEffect(() => {
     const checkMobile = () => {
@@ -323,6 +324,67 @@ function App() {
     }
   }, [user])
 
+  // 恢复开麦状态 - 当用户进入房间后检查是否需要恢复开麦
+  useEffect(() => {
+    const restoreMicState = async () => {
+      // 检查是否已经恢复过
+      if (hasRestoredMicRef.current) return
+      
+      // 检查是否需要恢复开麦状态
+      const savedMicState = sessionStorage.getItem('isMicOn')
+      if (savedMicState !== 'true') return
+      
+      // 确保已经进入房间且不是大厅
+      if (!currentRoom || currentRoom.isDefault) return
+      
+      // 确保已经有 peer 实例
+      const currentPeer = window.peer || peer
+      if (!currentPeer) return
+      
+      // 确保已经有 peerId
+      if (!peerId) return
+      
+      // 标记已经尝试恢复
+      hasRestoredMicRef.current = true
+      
+      console.log('检测到需要恢复开麦状态，正在恢复...')
+      
+      try {
+        // 获取麦克风流
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+        console.log('麦克风已获取（恢复状态）')
+        setLocalStream(stream)
+        
+        // 遍历当前房间的所有其他成员，发起呼叫
+        const newConnections = {}
+        roomUsers.forEach(otherUser => {
+          if (otherUser.peerId && otherUser.peerId !== peerId) {
+            console.log('恢复状态：发起呼叫给：', otherUser.peerId)
+            try {
+              const call = currentPeer.call(otherUser.peerId, stream)
+              newConnections[otherUser.peerId] = call
+            } catch (error) {
+              console.error('恢复状态：发起呼叫时出错:', error)
+            }
+          }
+        })
+        setConnections(newConnections)
+        setIsMicOn(true)
+        console.log('开麦状态已恢复')
+      } catch (error) {
+        console.error('恢复开麦状态失败:', error)
+        // 恢复失败，清除保存的状态
+        sessionStorage.removeItem('isMicOn')
+        // 重置标记，允许下次尝试
+        hasRestoredMicRef.current = false
+      }
+    }
+    
+    // 延迟执行，确保所有状态都已更新
+    const timer = setTimeout(restoreMicState, 500)
+    return () => clearTimeout(timer)
+  }, [currentRoom, peer, peerId, roomUsers])
+
   const fetchRooms = async () => {
     try {
       const res = await fetch(`${API_URL}/api/rooms`)
@@ -437,6 +499,20 @@ function App() {
     // 发送离开房间请求
     socket.emit('leaveRoom', { roomId: currentRoom.id, user })
     
+    // 如果正在开麦，先关闭麦克风
+    if (localStream) {
+      localStream.getTracks().forEach(track => track.stop())
+      setLocalStream(null)
+    }
+    // 关闭所有连接
+    Object.values(connections).forEach(call => call.close())
+    setConnections({})
+    setIsMicOn(false)
+    // 清除开麦状态
+    sessionStorage.removeItem('isMicOn')
+    // 重置恢复标记
+    hasRestoredMicRef.current = false
+    
     // 找到大厅房间
     const lobbyRoom = rooms.find(room => room.isDefault)
     if (lobbyRoom) {
@@ -450,7 +526,7 @@ function App() {
       // 清除sessionStorage中的房间信息
       sessionStorage.removeItem('currentRoom')
     }
-  }, [socket, currentRoom, user, rooms, enterRoom])
+  }, [socket, currentRoom, user, rooms, enterRoom, localStream, connections])
 
   const changeRoomStatus = useCallback((status) => {
     if (!socket || !currentRoom) return
@@ -578,15 +654,26 @@ function App() {
     if (socket) {
       socket.close()
     }
+    // 如果正在开麦，关闭麦克风
+    if (localStream) {
+      localStream.getTracks().forEach(track => track.stop())
+    }
+    // 关闭所有连接
+    Object.values(connections).forEach(call => call.close())
     // 清除sessionStorage中的用户信息和房间信息
     sessionStorage.removeItem('user')
     sessionStorage.removeItem('currentRoom')
+    sessionStorage.removeItem('isMicOn')
     setUser(null)
     setSocket(null)
     setCurrentRoom(null)
     setRoomUsers([])
     setRooms([])
     setMessages([])
+    setLocalStream(null)
+    setConnections({})
+    setIsMicOn(false)
+    hasRestoredMicRef.current = false
   }
 
   const sendMessage = useCallback(() => {
@@ -645,6 +732,8 @@ function App() {
         })
         setConnections(newConnections)
         setIsMicOn(true)
+        // 保存开麦状态到 sessionStorage
+        sessionStorage.setItem('isMicOn', 'true')
         console.log('麦克风已打开，已向房间成员发起呼叫')
       } catch (error) {
         console.error('获取麦克风权限失败:', error)
@@ -663,6 +752,8 @@ function App() {
       Object.values(connections).forEach(call => call.close())
       setConnections({})
       setIsMicOn(false)
+      // 清除开麦状态
+      sessionStorage.removeItem('isMicOn')
       console.log('麦克风已关闭')
     }
   }
