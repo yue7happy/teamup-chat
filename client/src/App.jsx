@@ -46,6 +46,7 @@ function App() {
   const [connections, setConnections] = useState({})
   const [remoteAudios, setRemoteAudios] = useState({})
   const hasRestoredMicRef = useRef(false)
+  const localStreamRef = useRef(null)
 
   useEffect(() => {
     const checkMobile = () => {
@@ -70,8 +71,10 @@ function App() {
     newPeer.on('call', (call) => {
       console.log('收到呼叫，来自：', call.peer)
       // 无论本地是否有流，都要应答
-      if (localStream) {
-        call.answer(localStream)
+      // 使用 ref 获取最新的 localStream
+      const currentStream = localStreamRef.current
+      if (currentStream) {
+        call.answer(currentStream)
       } else {
         call.answer()
       }
@@ -144,8 +147,24 @@ function App() {
                 // 检查房间是否仍然存在
                 const roomExists = updatedRooms.find(r => r.id === parsedRoom.id)
                 if (roomExists) {
-                  newSocket.emit('enterRoom', { roomId: parsedRoom.id, user })
-                  setCurrentRoom(parsedRoom)
+                  // 延迟进入房间，确保 peerId 已经获取
+                  const enterRoomWithDelay = () => {
+                    const currentPeerId = window.currentPeerId || peerId
+                    if (currentPeerId) {
+                      const userWithPeerId = { ...user, peerId: currentPeerId }
+                      console.log('发送 enterRoom 事件（恢复房间）:', { roomId: parsedRoom.id, user: userWithPeerId })
+                      newSocket.emit('enterRoom', { roomId: parsedRoom.id, user: userWithPeerId })
+                      // 同时发送 update-peer-id 确保 peerId 已更新
+                      newSocket.emit('update-peer-id', { userId: user.id, peerId: currentPeerId })
+                    } else {
+                      // 如果还没有 peerId，延迟重试
+                      console.log('等待 peerId 获取...')
+                      setTimeout(enterRoomWithDelay, 500)
+                      return
+                    }
+                    setCurrentRoom(parsedRoom)
+                  }
+                  enterRoomWithDelay()
                 } else {
                   // 房间不存在了，进入大厅
                   const lobbyRoom = updatedRooms.find(room => room.isDefault)
@@ -354,6 +373,8 @@ function App() {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
         console.log('麦克风已获取（恢复状态）')
         setLocalStream(stream)
+        // 同时更新 ref
+        localStreamRef.current = stream
         
         // 遍历当前房间的所有其他成员，发起呼叫
         const newConnections = {}
@@ -380,10 +401,39 @@ function App() {
       }
     }
     
-    // 延迟执行，确保所有状态都已更新
-    const timer = setTimeout(restoreMicState, 500)
-    return () => clearTimeout(timer)
+    // 立即执行，不延迟
+    restoreMicState()
   }, [currentRoom, peer, peerId, roomUsers])
+
+  // 当房间成员变化时，如果有新成员加入且当前正在开麦，向新成员发起呼叫
+  useEffect(() => {
+    // 只有在开麦状态下才处理
+    if (!isMicOn || !localStreamRef.current) return
+    
+    const currentPeer = window.peer || peer
+    if (!currentPeer || !peerId) return
+    
+    // 延迟执行，确保新成员已经准备好接收呼叫
+    const timer = setTimeout(() => {
+      // 检查是否有新成员需要呼叫
+      roomUsers.forEach(otherUser => {
+        if (otherUser.peerId && otherUser.peerId !== peerId) {
+          // 检查是否已经呼叫过
+          if (!connections[otherUser.peerId]) {
+            console.log('检测到新成员加入，发起呼叫给：', otherUser.peerId)
+            try {
+              const call = currentPeer.call(otherUser.peerId, localStreamRef.current)
+              setConnections(prev => ({ ...prev, [otherUser.peerId]: call }))
+            } catch (error) {
+              console.error('向新成员发起呼叫时出错:', error)
+            }
+          }
+        }
+      })
+    }, 1000) // 延迟 1 秒，确保新成员准备好
+    
+    return () => clearTimeout(timer)
+  }, [roomUsers, isMicOn, peer, peerId, connections])
 
   const fetchRooms = async () => {
     try {
@@ -478,7 +528,31 @@ function App() {
   const enterRoom = useCallback((room) => {
     if (!socket) return
     
-    if (currentRoom) {
+    // 如果当前在房间中，先清理语音连接
+    if (currentRoom && currentRoom.id !== room.id) {
+      console.log('切换房间，清理语音连接...')
+      // 停止本地麦克风流
+      if (localStream) {
+        localStream.getTracks().forEach(track => track.stop())
+        setLocalStream(null)
+      }
+      // 关闭所有 WebRTC 连接
+      Object.values(connections).forEach(call => call.close())
+      setConnections({})
+      // 停止所有远程音频
+      Object.values(remoteAudios).forEach(audio => {
+        if (audio) {
+          audio.pause()
+          audio.srcObject = null
+        }
+      })
+      setRemoteAudios({})
+      // 重置开麦状态
+      setIsMicOn(false)
+      sessionStorage.removeItem('isMicOn')
+      // 重置恢复标记
+      hasRestoredMicRef.current = false
+      
       socket.emit('leaveRoom', { roomId: currentRoom.id, user })
     }
     
@@ -491,7 +565,7 @@ function App() {
     setMessages([])
     // 保存当前房间到sessionStorage
     sessionStorage.setItem('currentRoom', JSON.stringify(room))
-  }, [socket, currentRoom, user, peerId])
+  }, [socket, currentRoom, user, peerId, localStream, connections, remoteAudios])
 
   const leaveRoom = useCallback(() => {
     if (!socket || !currentRoom) return
@@ -716,6 +790,8 @@ function App() {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
         console.log('麦克风已获取')
         setLocalStream(stream)
+        // 同时更新 ref
+        localStreamRef.current = stream
         
         // 遍历当前房间的所有其他成员，发起呼叫
         const newConnections = {}
@@ -746,6 +822,8 @@ function App() {
       if (localStream) {
         localStream.getTracks().forEach(track => track.stop())
         setLocalStream(null)
+        // 同时清除 ref
+        localStreamRef.current = null
       }
       
       // 关闭所有连接
