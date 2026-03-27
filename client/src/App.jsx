@@ -38,6 +38,13 @@ function App() {
   const [error, setError] = useState('')
   const [messages, setMessages] = useState([])
   const [messageInput, setMessageInput] = useState('')
+  const [peer, setPeer] = useState(null)
+  const [peerId, setPeerId] = useState(null)
+  const [localStream, setLocalStream] = useState(null)
+  const [isMicOn, setIsMicOn] = useState(false)
+  const [isDeafen, setIsDeafen] = useState(false)
+  const [connections, setConnections] = useState({})
+  const [remoteAudios, setRemoteAudios] = useState({})
 
   useEffect(() => {
     const checkMobile = () => {
@@ -56,6 +63,42 @@ function App() {
       setUser(parsedUser)
       fetchUsers()
     }
+    
+    // 初始化 Peer 实例，使用公共服务器
+    const newPeer = new Peer(undefined, { host: '0.peerjs.com', port: 443, path: '/', secure: true })
+    newPeer.on('call', (call) => {
+      console.log('收到呼叫，来自：', call.peer)
+      // 无论本地是否有流，都要应答
+      if (localStream) {
+        call.answer(localStream)
+      } else {
+        call.answer()
+      }
+      // 监听远程流并播放
+      call.on('stream', (remoteStream) => {
+        console.log('收到远程流，来自：', call.peer)
+        const audio = new Audio()
+        audio.srcObject = remoteStream
+        audio.play()
+        console.log('开始播放对方声音')
+        // 保存音频元素引用
+        setRemoteAudios(prev => ({ ...prev, [call.peer]: audio }))
+      })
+    })
+    newPeer.on('open', (id) => {
+      setPeerId(id)
+      window.currentPeerId = id
+      console.log('PeerJS 初始化成功，ID:', id)
+      // 发送 update-peer-id 事件到后端
+      if (user && socket) {
+        console.log('发送 update-peer-id 事件，用户ID:', user.id, 'peerId:', id)
+        socket.emit('update-peer-id', { userId: user.id, peerId: id })
+      }
+    })
+    setPeer(newPeer)
+    window.peer = newPeer
+    
+    return () => newPeer.destroy()
   }, [])
 
   useEffect(() => {
@@ -73,9 +116,17 @@ function App() {
 
       newSocket.on('connect', () => {
         console.log('WebSocket连接已建立，socket.id:', newSocket.id)
-        console.log('准备发送join事件:', user)
-        newSocket.emit('join', user)
+        // 发送 join 事件时包含 peerId
+        const userWithPeerId = { ...user, peerId: peerId }
+        console.log('准备发送join事件:', userWithPeerId)
+        newSocket.emit('join', userWithPeerId)
         console.log('join事件已发送')
+        
+        // 如果已经有 peerId，发送 update-peer-id 事件
+        if (peerId) {
+          console.log('WebSocket连接建立，发送 update-peer-id 事件，用户ID:', user.id, 'peerId:', peerId)
+          newSocket.emit('update-peer-id', { userId: user.id, peerId: peerId })
+        }
         
         // 获取房间列表
         fetch(`${API_URL}/api/rooms`)
@@ -369,13 +420,16 @@ function App() {
       socket.emit('leaveRoom', { roomId: currentRoom.id, user })
     }
     
-    socket.emit('enterRoom', { roomId: room.id, user })
+    // 发送 enterRoom 事件时包含 peerId
+    const userWithPeerId = { ...user, peerId: peerId }
+    console.log('发送 enterRoom 事件:', { roomId: room.id, user: userWithPeerId })
+    socket.emit('enterRoom', { roomId: room.id, user: userWithPeerId })
     setCurrentRoom(room)
     // 清空消息列表，只显示当前房间的消息
     setMessages([])
     // 保存当前房间到sessionStorage
     sessionStorage.setItem('currentRoom', JSON.stringify(room))
-  }, [socket, currentRoom, user])
+  }, [socket, currentRoom, user, peerId])
 
   const leaveRoom = useCallback(() => {
     if (!socket || !currentRoom) return
@@ -557,6 +611,111 @@ function App() {
       }
     }, 100)
   }, [socket, currentRoom, user, messageInput])
+
+  // 开麦/闭麦功能
+  const toggleMic = async () => {
+    const currentPeer = window.peer || peer
+    if (!currentPeer || !currentRoom || currentRoom.isDefault) return
+    
+    console.log('使用的 peer 实例：', currentPeer)
+    console.log('window.peer 实例：', window.peer)
+    console.log('state 中的 peer 实例：', peer)
+    
+    if (!isMicOn) {
+      // 开麦
+      console.log('正在打开麦克风...')
+      try {
+        // 获取麦克风流
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+        console.log('麦克风已获取')
+        setLocalStream(stream)
+        
+        // 遍历当前房间的所有其他成员，发起呼叫
+        const newConnections = {}
+        roomUsers.forEach(otherUser => {
+          if (otherUser.peerId && otherUser.peerId !== peerId) {
+            console.log('发起呼叫给：', otherUser.peerId)
+            try {
+              const call = currentPeer.call(otherUser.peerId, stream)
+              newConnections[otherUser.peerId] = call
+            } catch (error) {
+              console.error('发起呼叫时出错:', error)
+            }
+          }
+        })
+        setConnections(newConnections)
+        setIsMicOn(true)
+        console.log('麦克风已打开，已向房间成员发起呼叫')
+      } catch (error) {
+        console.error('获取麦克风权限失败:', error)
+        alert('无法获取麦克风权限，请检查浏览器设置')
+      }
+    } else {
+      // 闭麦
+      console.log('正在关闭麦克风...')
+      // 停止音频流
+      if (localStream) {
+        localStream.getTracks().forEach(track => track.stop())
+        setLocalStream(null)
+      }
+      
+      // 关闭所有连接
+      Object.values(connections).forEach(call => call.close())
+      setConnections({})
+      setIsMicOn(false)
+      console.log('麦克风已关闭')
+    }
+  }
+
+  // 闭听/开听功能
+  const toggleDeafen = () => {
+    if (!currentRoom || currentRoom.isDefault) return
+    
+    if (!isDeafen) {
+      // 闭听 - 暂停所有远程音频
+      console.log('正在闭听...')
+      Object.values(remoteAudios).forEach(audio => {
+        if (audio && !audio.paused) {
+          audio.pause()
+        }
+      })
+      setIsDeafen(true)
+      console.log('已闭听，停止播放远程声音')
+    } else {
+      // 开听 - 恢复播放所有远程音频
+      console.log('正在开听...')
+      Object.values(remoteAudios).forEach(audio => {
+        if (audio && audio.paused) {
+          audio.play()
+        }
+      })
+      setIsDeafen(false)
+      console.log('已开听，恢复播放远程声音')
+    }
+  }
+
+  // 测试呼叫功能
+  const testCall = () => {
+    const currentPeer = window.peer || peer
+    if (!currentPeer || !currentRoom || currentRoom.isDefault) return
+    
+    console.log('使用的 peer 实例：', currentPeer)
+    console.log('window.peer 实例：', window.peer)
+    console.log('state 中的 peer 实例：', peer)
+    
+    // 从当前房间成员列表中获取另一个用户的 peerId
+    const otherUser = roomUsers.find(user => user.peerId && user.peerId !== peerId)
+    if (otherUser) {
+      console.log('发起呼叫给：', otherUser.peerId)
+      try {
+        currentPeer.call(otherUser.peerId, null)
+      } catch (error) {
+        console.error('发起呼叫时出错:', error)
+      }
+    } else {
+      console.log('当前房间没有其他在线用户')
+    }
+  }
 
   if (!user) {
     return (
@@ -751,7 +910,17 @@ function App() {
           {currentRoom && (
             <div className="current-room-section">
               <div className="current-room-header">
-                <h2>当前房间: {currentRoom.name}</h2>
+                <div>
+                  <h2>当前房间: {currentRoom.name}</h2>
+                  {peerId && <div>我的 Peer ID: {peerId}</div>}
+                </div>
+                {!currentRoom.isDefault && (
+                  <div className="voice-controls">
+                    <button className="btn-secondary" onClick={toggleMic}>{isMicOn ? '闭麦' : '开麦'}</button>
+                    <button className="btn-secondary" onClick={toggleDeafen}>{isDeafen ? '开听' : '闭听'}</button>
+                    <button className="btn-secondary" onClick={testCall}>测试呼叫</button>
+                  </div>
+                )}
                 <button className="btn-secondary" onClick={leaveRoom}>离开房间</button>
               </div>
 

@@ -297,7 +297,7 @@ io.on('connection', (socket) => {
   console.log('用户连接:', socket.id);
   
   socket.on('join', (userData) => {
-    console.log('收到join事件，用户:', userData.username, 'ID:', userData.id);
+    console.log('收到join事件，用户:', userData.username, 'ID:', userData.id, 'peerId:', userData.peerId);
     
     // 注意：不在join时移除用户，保留用户在房间中的状态
     // 客户端会根据sessionStorage决定是否重新进入房间
@@ -311,6 +311,11 @@ io.on('connection', (socket) => {
     if (userInData) {
       console.log('找到用户数据，设置为在线');
       userInData.online = true;
+      // 记录用户的peerId（如果有）
+      if (userData.peerId) {
+        userInData.peerId = userData.peerId;
+        console.log('更新用户peerId:', userData.peerId);
+      }
       saveData(data);
       console.log('数据已保存');
       
@@ -320,7 +325,8 @@ io.on('connection', (socket) => {
         id: userData.id,
         username: userData.username,
         role: userData.role,
-        online: true
+        online: true,
+        peerId: userData.peerId
       });
       console.log('事件已广播');
     } else {
@@ -352,18 +358,38 @@ io.on('connection', (socket) => {
     
     // 将用户添加到新房间
     if (!room.users.find(u => u.id === user.id)) {
-      // 确保用户对象包含status属性
-      const userWithStatus = { ...user, status: user.status || 'idle' };
+      // 确保用户对象包含status和peerId属性
+      const userWithStatus = { 
+        ...user, 
+        status: user.status || 'idle',
+        peerId: user.peerId || ''
+      };
       room.users.push(userWithStatus);
     }
     
     if (currentUser) {
       currentUser.currentRoom = roomId;
+      // 更新在线用户的peerId
+      if (user.peerId) {
+        currentUser.peerId = user.peerId;
+      }
     }
     socket.join(roomId);
     
+    // 更新所有房间中该用户的peerId
+    data.rooms.forEach(r => {
+      const userInRoom = r.users.find(u => u.id === user.id);
+      if (userInRoom && user.peerId) {
+        userInRoom.peerId = user.peerId;
+      }
+    });
+    
     saveData(data);
     broadcastRooms();
+    
+    // 广播更新后的成员列表给房间内所有人，确保包含peerId
+    console.log('广播房间成员列表，房间:', room.name, '成员数:', room.users.length);
+    console.log('成员列表:', room.users.map(u => ({ name: u.username, peerId: u.peerId })));
     io.to(roomId).emit('roomUsersUpdated', room.users);
   });
   
@@ -422,6 +448,32 @@ io.on('connection', (socket) => {
     console.log('收到消息:', message);
     // 广播消息到房间内的所有用户
     io.to(message.roomId).emit('new_message', message);
+  });
+
+  socket.on('update-peer-id', ({ userId, peerId }) => {
+    console.log('收到update-peer-id事件，用户ID:', userId, 'peerId:', peerId);
+    // 更新用户数据中的peerId
+    const userInData = data.users.find(u => u.id === userId);
+    if (userInData) {
+      userInData.peerId = peerId;
+      saveData(data);
+    }
+    // 同时更新在线用户中的peerId
+    onlineUsers.forEach((onlineUser, socketId) => {
+      if (onlineUser.id === userId) {
+        onlineUser.peerId = peerId;
+      }
+    });
+    // 更新所有房间中该用户的peerId
+    data.rooms.forEach(room => {
+      const userInRoom = room.users.find(u => u.id === userId);
+      if (userInRoom) {
+        userInRoom.peerId = peerId;
+      }
+    });
+    saveData(data);
+    // 广播房间成员更新，确保包含peerId
+    broadcastRooms();
   });
 
   socket.on('disconnect', () => {
