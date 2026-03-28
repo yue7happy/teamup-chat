@@ -57,69 +57,160 @@ function App() {
     return () => window.removeEventListener('resize', checkMobile)
   }, [])
 
+  // 页面开始加载时
+  console.log('开始加载', Date.now())
+
+  // 初始化时间戳
+  const startTime = performance.now()
+
+  // 立即从sessionStorage读取状态
   useEffect(() => {
-    // 从sessionStorage加载用户信息
+    console.log(`[${performance.now() - startTime}ms] 开始初始化应用`)
+    
+    // 立即从sessionStorage读取上次的房间和开麦状态
     const storedUser = sessionStorage.getItem('user')
+    const storedRoom = sessionStorage.getItem('currentRoom')
+    const storedMicState = sessionStorage.getItem('isMicOn')
+    
+    console.log(`[${performance.now() - startTime}ms] 从sessionStorage读取状态完成`)
+    
     if (storedUser) {
       const parsedUser = JSON.parse(storedUser)
       setUser(parsedUser)
-      fetchUsers()
+      console.log(`[${performance.now() - startTime}ms] 用户状态已恢复`)
     }
     
-    // 初始化 Peer 实例，使用公共服务器
-    const newPeer = new Peer(undefined, { host: '0.peerjs.com', port: 443, path: '/', secure: true })
-    newPeer.on('call', (call) => {
-      console.log('收到呼叫，来自：', call.peer)
-      // 无论本地是否有流，都要应答
-      // 使用 ref 获取最新的 localStream
-      const currentStream = localStreamRef.current
-      if (currentStream) {
-        call.answer(currentStream)
-      } else {
-        call.answer()
+    if (storedRoom) {
+      try {
+        const parsedRoom = JSON.parse(storedRoom)
+        setCurrentRoom(parsedRoom)
+        console.log(`[${performance.now() - startTime}ms] 房间状态已恢复`)
+        console.log('房间状态恢复完成', Date.now())
+      } catch (error) {
+        console.error('恢复房间状态失败:', error)
       }
-      // 监听远程流并播放
-      call.on('stream', (remoteStream) => {
-        console.log('收到远程流，来自：', call.peer)
-        const audio = new Audio()
-        audio.srcObject = remoteStream
-        audio.play()
-        console.log('开始播放对方声音')
-        // 保存音频元素引用
-        setRemoteAudios(prev => ({ ...prev, [call.peer]: audio }))
-      })
-    })
-    newPeer.on('open', (id) => {
-      setPeerId(id)
-      window.currentPeerId = id
-      console.log('PeerJS 初始化成功，ID:', id)
-      // 发送 update-peer-id 事件到后端
-      if (user && socket) {
-        console.log('发送 update-peer-id 事件，用户ID:', user.id, 'peerId:', id)
-        socket.emit('update-peer-id', { userId: user.id, peerId: id })
-      }
-    })
-    setPeer(newPeer)
-    window.peer = newPeer
+    }
     
-    return () => newPeer.destroy()
+    // 检查是否已经有 Peer 实例
+    if (!window.peer) {
+      // 初始化 PeerJS，使用默认配置
+      console.log(`[${performance.now() - startTime}ms] 开始初始化 PeerJS`)
+      
+      // 使用默认配置，让 PeerJS 自动选择服务器
+      const peerInitStartTime = performance.now()
+      const newPeer = new Peer()
+      
+      newPeer.on('open', (id) => {
+        const connectTime = performance.now() - peerInitStartTime
+        console.log(`[${performance.now() - startTime}ms] PeerJS 初始化成功，耗时: ${connectTime.toFixed(2)}ms, ID:`, id)
+        console.log('PeerJS 初始化成功', Date.now())
+        
+        setPeerId(id)
+        window.currentPeerId = id
+        setPeer(newPeer)
+        window.peer = newPeer
+      })
+      
+      newPeer.on('error', (error) => {
+        console.error(`[${performance.now() - startTime}ms] PeerJS 初始化错误:`, error)
+        // 尝试使用备用配置
+        console.log('尝试使用备用配置...')
+        const fallbackPeer = new Peer(undefined, {
+          host: '0.peerjs.com',
+          port: 443,
+          path: '/',
+          secure: true
+        })
+        fallbackPeer.on('open', (id) => {
+          console.log(`[${performance.now() - startTime}ms] 备用配置 PeerJS 初始化成功，ID:`, id)
+          setPeerId(id)
+          window.currentPeerId = id
+          setPeer(fallbackPeer)
+          window.peer = fallbackPeer
+        })
+      })
+      
+      // 设置呼叫处理
+      newPeer.on('call', (call) => {
+        console.log('收到呼叫，来自：', call.peer)
+        // 无论本地是否有流，都要应答
+        // 使用 ref 获取最新的 localStream
+        const currentStream = localStreamRef.current
+        if (currentStream) {
+          call.answer(currentStream)
+        } else {
+          call.answer()
+        }
+        // 监听远程流并播放
+        call.on('stream', (remoteStream) => {
+          console.log('收到远程流，来自：', call.peer)
+          const audio = new Audio()
+          audio.srcObject = remoteStream
+          audio.play()
+          console.log('开始播放对方声音')
+          // 保存音频元素引用
+          setRemoteAudios(prev => ({ ...prev, [call.peer]: audio }))
+        })
+      })
+    } else {
+      console.log(`[${performance.now() - startTime}ms] PeerJS 实例已存在，复用现有实例`)
+      if (window.currentPeerId) {
+        setPeerId(window.currentPeerId)
+        console.log('PeerJS 初始化成功', Date.now())
+      }
+    }
+    
+    // 并行获取用户列表和房间列表
+    Promise.all([
+      // 获取用户列表
+      fetch(`${API_URL}/api/users`)
+        .then(res => res.json())
+        .then(data => {
+          console.log(`[${performance.now() - startTime}ms] 获取用户列表成功:`, data)
+          setUsers(data)
+          console.log('用户列表加载完成', Date.now())
+        })
+        .catch(err => {
+          console.error('获取用户列表失败:', err)
+        }),
+      
+      // 获取房间列表
+      fetch(`${API_URL}/api/rooms`)
+        .then(res => res.json())
+        .then(data => {
+          console.log(`[${performance.now() - startTime}ms] 获取房间列表成功:`, data)
+          setRooms(data)
+        })
+        .catch(err => {
+          console.error('获取房间列表失败:', err)
+        })
+    ]).then(() => {
+      console.log(`[${performance.now() - startTime}ms] 所有初始化操作完成`)
+    })
+    
+    return () => {
+      // 清理资源
+    }
   }, [])
 
+  // WebSocket 连接和事件处理
   useEffect(() => {
     if (user) {
+      console.log(`[${performance.now() - startTime}ms] 开始建立 WebSocket 连接`)
+      
       // 保存用户信息到sessionStorage
       sessionStorage.setItem('user', JSON.stringify(user))
       
-      console.log('准备创建WebSocket连接，API_URL:', API_URL)
       const newSocket = io(API_URL, {
         transports: ['websocket'],
         reconnection: false
       })
-      console.log('WebSocket实例已创建:', newSocket)
+      console.log(`[${performance.now() - startTime}ms] WebSocket 实例已创建`)
       setSocket(newSocket)
 
       newSocket.on('connect', () => {
-        console.log('WebSocket连接已建立，socket.id:', newSocket.id)
+        console.log(`[${performance.now() - startTime}ms] WebSocket 连接已建立，socket.id:`, newSocket.id)
+        console.log('WebSocket 连接成功', Date.now())
         // 发送 join 事件时包含 peerId
         const userWithPeerId = { ...user, peerId: peerId }
         console.log('准备发送join事件:', userWithPeerId)
@@ -132,19 +223,16 @@ function App() {
           newSocket.emit('update-peer-id', { userId: user.id, peerId: peerId })
         }
         
-        // 获取房间列表
-        fetch(`${API_URL}/api/rooms`)
-          .then(res => res.json())
-          .then(updatedRooms => {
-            setRooms(updatedRooms)
-            
-            // 尝试从sessionStorage中恢复房间状态
-            const savedRoom = sessionStorage.getItem('currentRoom')
-            if (savedRoom) {
-              try {
-                const parsedRoom = JSON.parse(savedRoom)
-                console.log('尝试恢复房间状态:', parsedRoom)
-                // 检查房间是否仍然存在
+        // 尝试从sessionStorage中恢复房间状态
+        const savedRoom = sessionStorage.getItem('currentRoom')
+        if (savedRoom) {
+          try {
+            const parsedRoom = JSON.parse(savedRoom)
+            console.log('尝试恢复房间状态:', parsedRoom)
+            // 检查房间是否仍然存在
+            fetch(`${API_URL}/api/rooms`)
+              .then(res => res.json())
+              .then(updatedRooms => {
                 const roomExists = updatedRooms.find(r => r.id === parsedRoom.id)
                 if (roomExists) {
                   // 延迟进入房间，确保 peerId 已经获取
@@ -162,7 +250,6 @@ function App() {
                       setTimeout(enterRoomWithDelay, 500)
                       return
                     }
-                    setCurrentRoom(parsedRoom)
                   }
                   enterRoomWithDelay()
                 } else {
@@ -174,12 +261,16 @@ function App() {
                     sessionStorage.setItem('currentRoom', JSON.stringify(lobbyRoom))
                   }
                 }
-              } catch (error) {
-                console.error('恢复房间状态失败:', error)
-                sessionStorage.removeItem('currentRoom')
-              }
-            } else {
-              // 没有保存的房间状态，进入默认大厅
+              })
+          } catch (error) {
+            console.error('恢复房间状态失败:', error)
+            sessionStorage.removeItem('currentRoom')
+          }
+        } else {
+          // 没有保存的房间状态，进入默认大厅
+          fetch(`${API_URL}/api/rooms`)
+            .then(res => res.json())
+            .then(updatedRooms => {
               const lobbyRoom = updatedRooms.find(room => room.isDefault)
               if (lobbyRoom) {
                 console.log('自动进入默认大厅:', lobbyRoom)
@@ -187,11 +278,8 @@ function App() {
                 setCurrentRoom(lobbyRoom)
                 sessionStorage.setItem('currentRoom', JSON.stringify(lobbyRoom))
               }
-            }
-          })
-          .catch(err => {
-            console.error('获取房间列表失败:', err)
-          })
+            })
+        }
       })
 
       newSocket.on('connect_error', (error) => {
@@ -340,8 +428,6 @@ function App() {
         }, 100)
       })
 
-      fetchRooms()
-
       return () => {
         // 不要主动关闭WebSocket连接，让浏览器自动处理
         // 这样服务器能正确检测到disconnect事件
@@ -398,6 +484,7 @@ function App() {
         setConnections(newConnections)
         setIsMicOn(true)
         console.log('开麦状态已恢复')
+        console.log('开麦状态恢复完成', Date.now())
       } catch (error) {
         console.error('恢复开麦状态失败:', error)
         // 恢复失败，清除保存的状态
