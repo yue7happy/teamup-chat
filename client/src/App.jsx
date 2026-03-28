@@ -207,14 +207,24 @@ function App() {
       })
 
       newSocket.on('roomUsersUpdated', (users) => {
+        console.log('收到房间成员更新:', users)
         setRoomUsers(users)
         // 同时更新当前房间的状态，确保状态同步
         if (currentRoom) {
+          // 打印更新前的房间成员
+          const roomBefore = rooms.find(r => r.id === currentRoom.id)
+          if (roomBefore) {
+            console.log('更新前的房间成员:', roomBefore.id, roomBefore.name, roomBefore.users ? roomBefore.users.map(u => u.username) : [])
+          }
+          
           fetch(`${API_URL}/api/rooms`)
             .then(res => res.json())
             .then(updatedRooms => {
+              console.log('更新后的房间列表:', updatedRooms)
+              setRooms(updatedRooms)
               const updatedRoom = updatedRooms.find(r => r.id === currentRoom.id)
               if (updatedRoom) {
+                console.log('更新后的当前房间:', updatedRoom.id, updatedRoom.name, updatedRoom.users ? updatedRoom.users.map(u => u.username) : [])
                 setCurrentRoom(updatedRoom)
                 sessionStorage.setItem('currentRoom', JSON.stringify(updatedRoom))
               }
@@ -313,12 +323,8 @@ function App() {
       // 监听用户离开消息
       newSocket.on('user_left', (data) => {
         console.log('收到user_left事件:', data)
-        // 如果离开的是当前房间，更新房间用户列表
-        if (currentRoom && currentRoom.id === data.roomId) {
-          setRoomUsers(prevUsers => prevUsers.filter(u => u.id !== data.userId))
-        }
-        // 重新获取房间列表以更新人数
-        fetchRooms()
+        // 不再调用fetchRooms()，完全依赖roomUsersUpdated事件来更新状态
+        // 这样可以避免用旧的房间列表覆盖新的状态
       })
 
       // 监听新消息
@@ -1023,6 +1029,10 @@ function App() {
                 } else {
                   roomColor = statusColors.idle; // 蓝色
                 }
+                
+                // 打印房间成员信息
+                console.log('渲染房间卡片:', room.id, room.name, '成员:', room.users ? room.users.map(u => u.username) : [], '人数:', room.userCount || 0)
+                
                 // 显示成员列表
                 const renderMembers = (users) => {
                   if (!users || users.length === 0) return ''

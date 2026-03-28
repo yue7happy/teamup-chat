@@ -338,19 +338,36 @@ io.on('connection', (socket) => {
   });
   
   socket.on('enterRoom', ({ roomId, user }) => {
+    console.log('收到enterRoom事件，用户:', user.username, 'ID:', user.id, '目标房间:', roomId);
+    
     const room = data.rooms.find(r => r.id === roomId);
-    if (!room) return;
+    if (!room) {
+      console.log('房间不存在:', roomId);
+      return;
+    }
     
     const currentUser = onlineUsers.get(socket.id);
+    
+    // 记录用户之前所在的房间
+    let previousRoomId = null;
+    data.rooms.forEach(r => {
+      if (r.users.find(u => u.id === user.id)) {
+        previousRoomId = r.id;
+      }
+    });
+    
+    console.log('用户之前所在房间:', previousRoomId);
     
     // 先从所有房间中移除该用户（确保不会同时出现在多个房间）
     data.rooms.forEach(r => {
       const userIndex = r.users.findIndex(u => u.id === user.id);
       if (userIndex !== -1) {
+        console.log('从房间', r.name, '移除用户', user.username);
         r.users.splice(userIndex, 1);
         if (r.users.length === 0 && !r.isDefault) {
           r.status = 'idle';
         }
+        console.log('房间', r.name, '现在有', r.users.length, '人');
         // 通知原房间内的其他用户
         io.to(r.id).emit('roomUsersUpdated', r.users);
       }
@@ -364,7 +381,9 @@ io.on('connection', (socket) => {
         status: user.status || 'idle',
         peerId: user.peerId || ''
       };
+      console.log('将用户', user.username, '添加到房间', room.name);
       room.users.push(userWithStatus);
+      console.log('房间', room.name, '现在有', room.users.length, '人');
     }
     
     if (currentUser) {
@@ -394,13 +413,25 @@ io.on('connection', (socket) => {
   });
   
   socket.on('leaveRoom', ({ roomId, user }) => {
+    console.log('收到leaveRoom事件，用户:', user.username, 'ID:', user.id, '离开房间:', roomId);
+    
     const room = data.rooms.find(r => r.id === roomId);
-    if (!room) return;
+    if (!room) {
+      console.log('房间不存在:', roomId);
+      return;
+    }
+    
+    console.log('离开房间前，房间', room.name, '有', room.users.length, '人');
+    console.log('离开前成员列表:', room.users.map(u => u.username));
     
     room.users = room.users.filter(u => u.id !== user.id);
     
+    console.log('离开房间后，房间', room.name, '有', room.users.length, '人');
+    console.log('离开后成员列表:', room.users.map(u => u.username));
+    
     if (room.users.length === 0 && !room.isDefault) {
       room.status = 'idle';
+      console.log('房间', room.name, '现在为空，设置状态为idle');
     } else if (room.users.length > 0 && !room.isDefault) {
       // 房间状态已经由用户通过 changeRoomStatus 设置
       // 保持当前状态不变
@@ -410,13 +441,16 @@ io.on('connection', (socket) => {
     const currentUser = onlineUsers.get(socket.id);
     if (currentUser) {
       currentUser.currentRoom = null;
+      console.log('更新在线用户', user.username, '的当前房间为null');
     }
     
     socket.leave(roomId);
+    console.log('用户', user.username, '已离开房间', room.name);
     
     saveData(data);
     broadcastRooms();
     io.to(roomId).emit('roomUsersUpdated', room.users);
+    console.log('广播房间', room.name, '的成员列表更新');
     
     // 广播用户离开消息
     io.emit('user_left', {
@@ -424,6 +458,7 @@ io.on('connection', (socket) => {
       username: user.username,
       roomId: roomId
     });
+    console.log('广播user_left事件');
   });
   
   socket.on('changeRoomStatus', ({ roomId, status, user }) => {
