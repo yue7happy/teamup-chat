@@ -375,13 +375,17 @@ io.on('connection', (socket) => {
     
     // 将用户添加到新房间
     if (!room.users.find(u => u.id === user.id)) {
+      // 新用户的初始状态应该等于房间的当前状态
+      // 只有房间当前是空闲时，新用户才设为空闲
+      const initialStatus = room.status !== 'idle' ? room.status : (user.status || 'idle');
+      
       // 确保用户对象包含status和peerId属性
       const userWithStatus = { 
         ...user, 
-        status: user.status || 'idle',
+        status: initialStatus,
         peerId: user.peerId || ''
       };
-      console.log('将用户', user.username, '添加到房间', room.name);
+      console.log('将用户', user.username, '添加到房间', room.name, '，初始状态:', initialStatus);
       room.users.push(userWithStatus);
       console.log('房间', room.name, '现在有', room.users.length, '人');
     }
