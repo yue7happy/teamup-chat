@@ -394,6 +394,12 @@ body {
   font-weight: 600;
 }
 
+.voice-controls {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
 .room-status-controls {
   display: flex;
   align-items: center;
