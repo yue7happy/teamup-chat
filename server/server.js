@@ -43,6 +43,12 @@ function saveData(data) {
 let data = loadData();
 
 const onlineUsers = new Map();
+// 房间计时器管理
+const roomTimers = new Map();
+// 断开连接用户管理（用于延迟处理）
+const disconnectedUsers = new Map();
+// 断开连接延迟时间（毫秒）
+const DISCONNECT_DELAY = 3000;
 
 // 初始化用户在线状态
 function initUserStatus() {
@@ -52,8 +58,72 @@ function initUserStatus() {
   saveData(data);
 }
 
+// 初始化房间计时器
+function initRoomTimers() {
+  data.rooms.forEach(room => {
+    if (!room.isDefault && (room.status === 'matching' || room.status === 'gaming')) {
+      startRoomTimer(room.id);
+    }
+  });
+}
+
+// 开始房间计时器
+function startRoomTimer(roomId) {
+  // 清除已有的计时器
+  if (roomTimers.has(roomId)) {
+    clearInterval(roomTimers.get(roomId));
+  }
+  
+  // 初始化计时数据
+  const room = data.rooms.find(r => r.id === roomId);
+  if (room) {
+    if (!room.timer) {
+      room.timer = 0;
+    }
+    
+    // 每秒更新一次计时
+    const timer = setInterval(() => {
+      const room = data.rooms.find(r => r.id === roomId);
+      if (room) {
+        room.timer++;
+        
+        // 保存数据并广播更新
+        saveData(data);
+        broadcastRooms();
+        
+        // 检查是否需要自动切换状态（15分钟）
+        if (room.timer >= 900) {
+          room.status = 'idle';
+          room.timer = 0;
+          clearInterval(roomTimers.get(roomId));
+          roomTimers.delete(roomId);
+          saveData(data);
+          broadcastRooms();
+        }
+      }
+    }, 1000);
+    
+    roomTimers.set(roomId, timer);
+  }
+}
+
+// 停止房间计时器
+function stopRoomTimer(roomId) {
+  if (roomTimers.has(roomId)) {
+    clearInterval(roomTimers.get(roomId));
+    roomTimers.delete(roomId);
+  }
+  
+  const room = data.rooms.find(r => r.id === roomId);
+  if (room) {
+    room.timer = 0;
+  }
+}
+
 // 初始化用户状态
 initUserStatus();
+// 初始化房间计时器
+initRoomTimers();
 
 app.post('/api/login', (req, res) => {
   const { username, password } = req.body;
@@ -81,8 +151,10 @@ app.post('/api/login', (req, res) => {
 app.get('/api/rooms', (req, res) => {
   const roomsWithUserCount = data.rooms.map(room => ({
     ...room,
-    userCount: room.users.length
+    userCount: room.users.length,
+    timer: room.timer || 0
   }));
+  console.log('返回的房间列表：', roomsWithUserCount);
   res.json(roomsWithUserCount);
 });
 
@@ -288,7 +360,8 @@ app.delete('/api/rooms/:id', (req, res) => {
 function broadcastRooms() {
   const roomsWithUserCount = data.rooms.map(room => ({
     ...room,
-    userCount: room.users.length
+    userCount: room.users.length,
+    timer: room.timer || 0
   }));
   io.emit('roomsUpdated', roomsWithUserCount);
 }
@@ -299,12 +372,46 @@ io.on('connection', (socket) => {
   socket.on('join', (userData) => {
     console.log('收到join事件，用户:', userData.username, 'ID:', userData.id, 'peerId:', userData.peerId);
     
-    // 注意：不在join时移除用户，保留用户在房间中的状态
-    // 客户端会根据sessionStorage决定是否重新进入房间
-    // enterRoom事件会处理房间切换逻辑
-    
-    onlineUsers.set(socket.id, { ...userData, socketId: socket.id, currentRoom: null });
-    console.log('用户已添加到onlineUsers');
+    // 检查用户是否在断开连接列表中（可能是刷新页面）
+    if (disconnectedUsers.has(userData.id)) {
+      console.log('用户', userData.username, '正在重新连接（刷新页面），取消断开连接定时器');
+      const userInfo = disconnectedUsers.get(userData.id);
+      // 取消定时器
+      clearTimeout(userInfo.timer);
+      // 从断开连接列表中移除
+      disconnectedUsers.delete(userData.id);
+      console.log('用户', userData.username, '已从断开连接列表中移除，保持在原房间');
+      
+      // 检查用户之前所在的房间
+      let previousRoom = null;
+      let userPreviousStatus = 'idle';
+      data.rooms.forEach(room => {
+        const userInRoom = room.users.find(u => u.id === userData.id);
+        if (userInRoom) {
+          previousRoom = room;
+          userPreviousStatus = userInRoom.status;
+          console.log('用户之前在房间:', room.name, '状态:', userPreviousStatus);
+          // 更新用户的peerId
+          userInRoom.peerId = userData.peerId || '';
+        }
+      });
+      
+      // 更新在线用户信息
+      onlineUsers.set(socket.id, { ...userData, socketId: socket.id, currentRoom: previousRoom ? previousRoom.id : null });
+      console.log('用户已添加到onlineUsers，当前房间:', previousRoom ? previousRoom.id : null);
+      
+      // 如果用户之前在某个房间，加入该房间的socket房间
+      if (previousRoom) {
+        socket.join(previousRoom.id);
+        console.log('用户已加入socket房间:', previousRoom.id);
+        // 广播房间成员更新，确保包含更新后的peerId
+        io.to(previousRoom.id).emit('roomUsersUpdated', previousRoom.users);
+      }
+    } else {
+      // 新用户或首次连接
+      onlineUsers.set(socket.id, { ...userData, socketId: socket.id, currentRoom: null });
+      console.log('用户已添加到onlineUsers');
+    }
     
     // 设置用户在线状态
     const userInData = data.users.find(u => u.id === userData.id);
@@ -348,33 +455,40 @@ io.on('connection', (socket) => {
     
     const currentUser = onlineUsers.get(socket.id);
     
-    // 记录用户之前所在的房间
-    let previousRoomId = null;
-    data.rooms.forEach(r => {
-      if (r.users.find(u => u.id === user.id)) {
-        previousRoomId = r.id;
-      }
-    });
+    // 检查用户是否已经在目标房间中
+    const userInTargetRoom = room.users.find(u => u.id === user.id);
     
-    console.log('用户之前所在房间:', previousRoomId);
-    
-    // 先从所有房间中移除该用户（确保不会同时出现在多个房间）
-    data.rooms.forEach(r => {
-      const userIndex = r.users.findIndex(u => u.id === user.id);
-      if (userIndex !== -1) {
-        console.log('从房间', r.name, '移除用户', user.username);
-        r.users.splice(userIndex, 1);
-        if (r.users.length === 0 && !r.isDefault) {
-          r.status = 'idle';
+    if (userInTargetRoom) {
+      // 用户已经在目标房间中，只更新peerId
+      console.log('用户', user.username, '已经在房间', room.name, '中，更新peerId');
+      userInTargetRoom.peerId = user.peerId || '';
+    } else {
+      // 记录用户之前所在的房间
+      let previousRoomId = null;
+      data.rooms.forEach(r => {
+        if (r.users.find(u => u.id === user.id)) {
+          previousRoomId = r.id;
         }
-        console.log('房间', r.name, '现在有', r.users.length, '人');
-        // 通知原房间内的其他用户
-        io.to(r.id).emit('roomUsersUpdated', r.users);
-      }
-    });
-    
-    // 将用户添加到新房间
-    if (!room.users.find(u => u.id === user.id)) {
+      });
+      
+      console.log('用户之前所在房间:', previousRoomId);
+      
+      // 先从所有房间中移除该用户（确保不会同时出现在多个房间）
+      data.rooms.forEach(r => {
+        const userIndex = r.users.findIndex(u => u.id === user.id);
+        if (userIndex !== -1) {
+          console.log('从房间', r.name, '移除用户', user.username);
+          r.users.splice(userIndex, 1);
+          if (r.users.length === 0 && !r.isDefault) {
+            r.status = 'idle';
+          }
+          console.log('房间', r.name, '现在有', r.users.length, '人');
+          // 通知原房间内的其他用户
+          io.to(r.id).emit('roomUsersUpdated', r.users);
+        }
+      });
+      
+      // 将用户添加到新房间
       // 新用户的初始状态应该等于房间的当前状态
       // 只有房间当前是空闲时，新用户才设为空闲
       const initialStatus = room.status !== 'idle' ? room.status : (user.status || 'idle');
@@ -469,21 +583,47 @@ io.on('connection', (socket) => {
   });
   
   socket.on('changeRoomStatus', ({ roomId, status, user }) => {
+    console.log('收到changeRoomStatus事件，房间ID:', roomId, '新状态:', status, '用户:', user.username);
     const room = data.rooms.find(r => r.id === roomId);
-    if (!room) return;
+    if (!room) {
+      console.log('房间不存在:', roomId);
+      return;
+    }
     
+    console.log('更新前房间状态:', room.status, '计时器:', room.timer);
     room.status = status;
+    console.log('更新后房间状态:', room.status);
+    console.log('房间 ' + roomId + ' 状态变为：' + status);
     
     // 当任意用户点击状态按钮时，更新房间内所有在线用户的状态
     room.users.forEach(userInRoom => {
       userInRoom.status = status;
+      console.log('更新用户状态:', userInRoom.username, '新状态:', status);
     });
     
+    // 管理房间计时器
+    if (!room.isDefault) {
+      if (status === 'matching' || status === 'gaming') {
+        // 开始或重置计时器
+        room.timer = 0;
+        console.log('开始或重置计时器，房间ID:', roomId, '状态:', status);
+        startRoomTimer(roomId);
+      } else {
+        // 停止计时器
+        console.log('停止计时器，房间ID:', roomId, '状态:', status);
+        stopRoomTimer(roomId);
+        room.timer = 0;
+      }
+    }
+    
     saveData(data);
+    console.log('数据已保存');
     
     broadcastRooms();
+    console.log('已广播房间列表更新');
     // 通知房间内的其他用户
     io.to(roomId).emit('roomUsersUpdated', room.users);
+    console.log('已通知房间内其他用户');
   });
   
   socket.on('send_message', (message) => {
@@ -523,56 +663,127 @@ io.on('connection', (socket) => {
     const user = onlineUsers.get(socket.id);
     if (user) {
       console.log('断开连接的用户:', user.username, 'ID:', user.id);
-      // 设置用户离线状态
-      const userInData = data.users.find(u => u.id === user.id);
-      if (userInData) {
-        console.log('找到用户数据，设置为离线');
-        userInData.online = false;
-        saveData(data);
-        
-        // 广播用户状态更新
-        console.log('广播user_status_updated事件，用户:', user.username, '状态: 离线');
-        io.emit('user_status_updated', {
-          id: user.id,
-          username: user.username,
-          role: user.role,
-          online: false
-        });
+      
+      // 检查用户是否在断开连接列表中
+      if (disconnectedUsers.has(user.id)) {
+        console.log('用户', user.username, '已经在断开连接列表中，更新定时器');
+        const userInfo = disconnectedUsers.get(user.id);
+        // 取消旧定时器
+        clearTimeout(userInfo.timer);
       }
       
-      // 从所有房间中移除该用户
-      data.rooms.forEach(room => {
-        const userIndex = room.users.findIndex(u => u.id === user.id);
-        if (userIndex !== -1) {
-          console.log('从房间', room.name, '中移除用户', user.username);
-          room.users.splice(userIndex, 1);
+      // 启动延迟定时器，3秒后再处理断开连接
+      const timer = setTimeout(() => {
+        console.log('用户', user.username, '断开连接超过3秒，从房间移除');
+        
+        // 设置用户离线状态
+        const userInData = data.users.find(u => u.id === user.id);
+        if (userInData) {
+          console.log('找到用户数据，设置为离线');
+          userInData.online = false;
+          saveData(data);
           
-          if (room.users.length === 0 && !room.isDefault) {
-            room.status = 'idle';
-          } else if (room.users.length > 0 && !room.isDefault) {
-            // 房间状态已经由用户通过 changeRoomStatus 设置
-            // 保持当前状态不变
-            console.log('房间', room.name, '当前状态:', room.status);
-          }
-          
-          // 广播用户离开消息
-          io.emit('user_left', {
-            userId: user.id,
+          // 广播用户状态更新
+          console.log('广播user_status_updated事件，用户:', user.username, '状态: 离线');
+          io.emit('user_status_updated', {
+            id: user.id,
             username: user.username,
-            roomId: room.id
+            role: user.role,
+            online: false
           });
-          // 通知房间内的其他用户
-          io.to(room.id).emit('roomUsersUpdated', room.users);
         }
-      });
+        
+        // 从所有房间中移除该用户
+        data.rooms.forEach(room => {
+          const userIndex = room.users.findIndex(u => u.id === user.id);
+          if (userIndex !== -1) {
+            console.log('从房间', room.name, '中移除用户', user.username);
+            room.users.splice(userIndex, 1);
+            
+            // 重新计算房间状态，只由当前房间内的成员状态决定
+            if (!room.isDefault) {
+              if (room.users.length === 0) {
+                // 房间成员为空，将房间状态设为 idle，计时器归零
+                console.log('房间', room.name, '现在为空，设置状态为 idle');
+                room.status = 'idle';
+                room.timer = 0;
+                // 停止计时器
+                stopRoomTimer(room.id);
+              } else {
+                // 房间还有其他成员，按成员状态重新计算（优先级：匹配中 > 游戏中 > 空闲）
+                console.log('房间', room.name, '还有', room.users.length, '个成员，重新计算状态');
+                
+                // 检查是否有成员处于 matching 状态
+                const hasMatching = room.users.some(u => u.status === 'matching');
+                // 检查是否有成员处于 gaming 状态
+                const hasGaming = room.users.some(u => u.status === 'gaming');
+                
+                const oldStatus = room.status;
+                
+                if (hasMatching) {
+                  // 有成员处于 matching 状态，房间状态设为 matching
+                  room.status = 'matching';
+                  console.log('房间', room.name, '状态设为 matching');
+                } else if (hasGaming) {
+                  // 有成员处于 gaming 状态，房间状态设为 gaming
+                  room.status = 'gaming';
+                  console.log('房间', room.name, '状态设为 gaming');
+                } else {
+                  // 所有成员都处于 idle 状态，房间状态设为 idle
+                  room.status = 'idle';
+                  room.timer = 0;
+                  // 停止计时器
+                  stopRoomTimer(room.id);
+                  console.log('房间', room.name, '状态设为 idle');
+                }
+                
+                // 如果状态发生变化，管理计时器
+                if (room.status !== oldStatus) {
+                  if (room.status === 'matching' || room.status === 'gaming') {
+                    // 开始或重置计时器
+                    room.timer = 0;
+                    console.log('开始或重置计时器，房间ID:', room.id, '状态:', room.status);
+                    startRoomTimer(room.id);
+                  } else {
+                    // 停止计时器
+                    console.log('停止计时器，房间ID:', room.id, '状态:', room.status);
+                    stopRoomTimer(room.id);
+                    room.timer = 0;
+                  }
+                }
+              }
+            }
+            
+            // 广播用户离开消息
+            io.emit('user_left', {
+              userId: user.id,
+              username: user.username,
+              roomId: room.id
+            });
+            // 通知房间内的其他用户
+            io.to(room.id).emit('roomUsersUpdated', room.users);
+          }
+        });
+        
+        // 保存数据
+        saveData(data);
+        // 广播房间列表更新
+        broadcastRooms();
+        
+        // 从断开连接列表中移除
+        disconnectedUsers.delete(user.id);
+        console.log('用户', user.username, '已从断开连接列表中移除，断开连接处理完成');
+      }, DISCONNECT_DELAY);
       
-      // 保存数据
-      saveData(data);
-      // 广播房间列表更新
-      broadcastRooms();
+      // 将用户添加到断开连接列表
+      disconnectedUsers.set(user.id, {
+        user,
+        timer
+      });
+      console.log('用户', user.username, '已添加到断开连接列表，等待', DISCONNECT_DELAY, '毫秒');
     }
     onlineUsers.delete(socket.id);
-    console.log('用户断开连接处理完成:', socket.id);
+    console.log('用户断开连接处理完成（延迟处理）:', socket.id);
   });
 });
 

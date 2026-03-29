@@ -70,9 +70,8 @@ function App() {
   useEffect(() => {
     console.log(`[${performance.now() - startTime}ms] 开始初始化应用`)
     
-    // 立即从sessionStorage读取上次的房间和开麦状态
+    // 立即从sessionStorage读取上次的用户和开麦状态
     const storedUser = sessionStorage.getItem('user')
-    const storedRoom = sessionStorage.getItem('currentRoom')
     const storedMicState = sessionStorage.getItem('isMicOn')
     
     console.log(`[${performance.now() - startTime}ms] 从sessionStorage读取状态完成`)
@@ -81,19 +80,6 @@ function App() {
       const parsedUser = JSON.parse(storedUser)
       setUser(parsedUser)
       console.log(`[${performance.now() - startTime}ms] 用户状态已恢复`)
-    }
-    
-    if (storedRoom) {
-      try {
-        const parsedRoom = JSON.parse(storedRoom)
-        // 确保 isDefault 属性存在
-        const roomWithIsDefault = { ...parsedRoom, isDefault: parsedRoom.isDefault || false }
-        console.log(`[${performance.now() - startTime}ms] 房间状态已恢复，房间信息:`, roomWithIsDefault.id, roomWithIsDefault.name, '是否为大厅:', roomWithIsDefault.isDefault)
-        setCurrentRoom(roomWithIsDefault)
-        console.log('房间状态恢复完成', Date.now())
-      } catch (error) {
-        console.error('恢复房间状态失败:', error)
-      }
     }
     
     // 检查是否已经有 Peer 实例
@@ -185,6 +171,30 @@ function App() {
         .then(data => {
           console.log(`[${performance.now() - startTime}ms] 获取房间列表成功:`, data)
           setRooms(data)
+          
+          // 从后端数据中恢复房间状态，不使用本地缓存的房间状态
+          const storedRoom = sessionStorage.getItem('currentRoom')
+          if (storedRoom) {
+            try {
+              const parsedRoom = JSON.parse(storedRoom)
+              const updatedRoom = data.find(r => r.id === parsedRoom.id)
+              if (updatedRoom) {
+                // 确保 isDefault 属性存在
+                const roomWithIsDefault = { ...updatedRoom, isDefault: updatedRoom.isDefault || false }
+                console.log(`[${performance.now() - startTime}ms] 房间状态已更新为最新数据:`, roomWithIsDefault.id, roomWithIsDefault.name, '状态:', roomWithIsDefault.status, '计时器:', roomWithIsDefault.timer)
+                setCurrentRoom(roomWithIsDefault)
+                sessionStorage.setItem('currentRoom', JSON.stringify(roomWithIsDefault))
+              } else {
+                // 房间不存在了，清空本地缓存
+                sessionStorage.removeItem('currentRoom')
+                setCurrentRoom(null)
+              }
+            } catch (error) {
+              console.error('更新房间状态失败:', error)
+              sessionStorage.removeItem('currentRoom')
+              setCurrentRoom(null)
+            }
+          }
         })
         .catch(err => {
           console.error('获取房间列表失败:', err)
@@ -544,7 +554,12 @@ function App() {
   }, [socket, currentRoom, user, rooms, localStream, connections])
 
   const changeRoomStatus = useCallback((status) => {
-    if (!socket || !currentRoom) return
+    if (!socket || !currentRoom) {
+      console.log('changeRoomStatus: socket 或 currentRoom 不存在');
+      return;
+    }
+    
+    console.log('changeRoomStatus: 开始更新房间状态，房间ID:', currentRoom.id, '新状态:', status, '用户:', user.username);
     
     // 立即更新本地状态，让按钮颜色立即变化
     const updatedRoom = { ...currentRoom, status }
@@ -553,7 +568,9 @@ function App() {
     sessionStorage.setItem('currentRoom', JSON.stringify(updatedRoom))
     
     // 发送到服务器，包含用户信息
+    console.log('changeRoomStatus: 发送 changeRoomStatus 事件到服务器');
     socket.emit('changeRoomStatus', { roomId: currentRoom.id, status, user })
+    console.log('changeRoomStatus: 事件发送完成');
   }, [socket, currentRoom, user])
 
   const handleRoomClick = (room) => {
@@ -859,26 +876,32 @@ function App() {
           newSocket.emit('update-peer-id', { userId: user.id, peerId: peerId })
         }
         
-        // 尝试从sessionStorage中恢复房间状态
-        const savedRoom = sessionStorage.getItem('currentRoom')
-        console.log('[恢复房间] sessionStorage中的房间:', savedRoom ? JSON.parse(savedRoom) : null)
-        if (savedRoom) {
-          try {
-            const parsedRoom = JSON.parse(savedRoom)
-            console.log('[恢复房间] 尝试恢复房间状态:', parsedRoom.id, parsedRoom.name, '是否为大厅:', parsedRoom.isDefault)
-            // 检查房间是否仍然存在
-            fetch(`${API_URL}/api/rooms`)
-              .then(res => res.json())
-              .then(updatedRooms => {
+        // 先获取最新的房间列表，然后恢复房间状态
+        fetch(`${API_URL}/api/rooms`)
+          .then(res => res.json())
+          .then(updatedRooms => {
+            console.log('[恢复房间] 获取最新房间列表:', updatedRooms)
+            setRooms(updatedRooms)
+            
+            // 尝试从sessionStorage中恢复房间状态，但使用后端返回的最新数据
+            const savedRoom = sessionStorage.getItem('currentRoom')
+            console.log('[恢复房间] sessionStorage中的房间:', savedRoom ? JSON.parse(savedRoom) : null)
+            
+            if (savedRoom) {
+              try {
+                const parsedRoom = JSON.parse(savedRoom)
+                console.log('[恢复房间] 尝试恢复房间状态:', parsedRoom.id, parsedRoom.name, '是否为大厅:', parsedRoom.isDefault)
+                
+                // 检查房间是否仍然存在，使用后端返回的最新数据
                 const roomExists = updatedRooms.find(r => r.id === parsedRoom.id)
                 if (roomExists) {
                   // 确保 isDefault 属性存在
                   const roomWithIsDefault = { ...roomExists, isDefault: roomExists.isDefault || false }
-                  console.log('[恢复房间] 房间存在，房间信息:', roomWithIsDefault.id, roomWithIsDefault.name, '是否为大厅:', roomWithIsDefault.isDefault)
+                  console.log('[恢复房间] 房间存在，使用后端最新数据:', roomWithIsDefault.id, roomWithIsDefault.name, '状态:', roomWithIsDefault.status, '计时器:', roomWithIsDefault.timer, '是否为大厅:', roomWithIsDefault.isDefault)
                   // 更新 currentRoom 为最新的房间信息
                   setCurrentRoom(roomWithIsDefault)
                   sessionStorage.setItem('currentRoom', JSON.stringify(roomWithIsDefault))
-                  console.log('[恢复房间] 房间状态已更新为:', roomWithIsDefault.id, roomWithIsDefault.name)
+                  console.log('[恢复房间] 房间状态已更新为后端最新数据:', roomWithIsDefault.id, roomWithIsDefault.name)
                   
                   // 延迟进入房间，确保 peerId 已经获取
                   const enterRoomWithDelay = () => {
@@ -886,8 +909,8 @@ function App() {
                     console.log('[恢复房间] 准备进入房间，当前peerId:', currentPeerId)
                     if (currentPeerId) {
                       const userWithPeerId = { ...user, peerId: currentPeerId }
-                      console.log('[恢复房间] 发送 enterRoom 事件（恢复房间）:', { roomId: parsedRoom.id, user: userWithPeerId })
-                      newSocket.emit('enterRoom', { roomId: parsedRoom.id, user: userWithPeerId })
+                      console.log('[恢复房间] 发送 enterRoom 事件（恢复房间）:', { roomId: roomWithIsDefault.id, user: userWithPeerId })
+                      newSocket.emit('enterRoom', { roomId: roomWithIsDefault.id, user: userWithPeerId })
                       // 同时发送 update-peer-id 确保 peerId 已更新
                       newSocket.emit('update-peer-id', { userId: user.id, peerId: currentPeerId })
                     } else {
@@ -907,16 +930,20 @@ function App() {
                     sessionStorage.setItem('currentRoom', JSON.stringify(lobbyRoom))
                   }
                 }
-              })
-          } catch (error) {
-            console.error('恢复房间状态失败:', error)
-            sessionStorage.removeItem('currentRoom')
-          }
-        } else {
-          // 没有保存的房间状态，进入默认大厅
-          fetch(`${API_URL}/api/rooms`)
-            .then(res => res.json())
-            .then(updatedRooms => {
+              } catch (error) {
+                console.error('恢复房间状态失败:', error)
+                sessionStorage.removeItem('currentRoom')
+                
+                // 进入默认大厅
+                const lobbyRoom = updatedRooms.find(room => room.isDefault)
+                if (lobbyRoom) {
+                  newSocket.emit('enterRoom', { roomId: lobbyRoom.id, user })
+                  setCurrentRoom(lobbyRoom)
+                  sessionStorage.setItem('currentRoom', JSON.stringify(lobbyRoom))
+                }
+              }
+            } else {
+              // 没有保存的房间状态，进入默认大厅
               const lobbyRoom = updatedRooms.find(room => room.isDefault)
               if (lobbyRoom) {
                 console.log('自动进入默认大厅:', lobbyRoom)
@@ -924,8 +951,11 @@ function App() {
                 setCurrentRoom(lobbyRoom)
                 sessionStorage.setItem('currentRoom', JSON.stringify(lobbyRoom))
               }
-            })
-        }
+            }
+          })
+          .catch(err => {
+            console.error('获取房间列表失败:', err)
+          })
       })
 
       newSocket.on('connect_error', (error) => {
@@ -1225,7 +1255,7 @@ function App() {
                 }
                 
                 // 打印房间成员信息
-                console.log('渲染房间卡片:', room.id, room.name, '成员:', room.users ? room.users.map(u => u.username) : [], '人数:', room.userCount || 0)
+                console.log('渲染房间卡片:', room.id, room.name, '状态:', room.status, '计时器:', room.timer, '成员:', room.users ? room.users.map(u => u.username) : [], '人数:', room.userCount || 0)
                 
                 // 显示成员列表
                 const renderMembers = (users) => {
@@ -1237,6 +1267,17 @@ function App() {
                   }
                 }
                 
+                // 格式化计时
+                const formatTime = (seconds) => {
+                  const mins = Math.floor(seconds / 60)
+                  const secs = seconds % 60
+                  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+                }
+                
+                // 获取房间计时（使用后端返回的数据）
+                const roomTimer = room.timer || 0
+                const showTimer = !room.isDefault && (room.status === 'matching' || room.status === 'gaming')
+                
                 return (
                   <div
                     key={room.id}
@@ -1247,7 +1288,14 @@ function App() {
                   >
                     <div className="room-info">
                       <h3>{room.name}</h3>
-                      <span className="room-status">{statusLabels[room.status] || '空闲'}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
+                        <span className="room-status">{statusLabels[room.status] || '空闲'}</span>
+                        {showTimer && (
+                          <span style={{ fontSize: '12px', opacity: 0.9 }}>
+                            · {formatTime(roomTimer)}
+                          </span>
+                        )}
+                      </div>
                       {!room.isDefault && room.users && room.users.length > 0 && (
                         <div className="room-members">
                           {renderMembers(room.users)}
