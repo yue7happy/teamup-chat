@@ -386,6 +386,7 @@ io.on('connection', (socket) => {
         peerId: user.peerId || ''
       };
       console.log('将用户', user.username, '添加到房间', room.name, '，初始状态:', initialStatus);
+      console.log(`用户 ${user.id} 加入房间 ${roomId}`);
       room.users.push(userWithStatus);
       console.log('房间', room.name, '现在有', room.users.length, '人');
     }
@@ -413,11 +414,13 @@ io.on('connection', (socket) => {
     // 广播更新后的成员列表给房间内所有人，确保包含peerId
     console.log('广播房间成员列表，房间:', room.name, '成员数:', room.users.length);
     console.log('成员列表:', room.users.map(u => ({ name: u.username, peerId: u.peerId })));
+    console.log(`广播成员更新，房间 ${roomId}，成员列表：${room.users.map(u => u.id).join(', ')}`);
     io.to(roomId).emit('roomUsersUpdated', room.users);
   });
   
   socket.on('leaveRoom', ({ roomId, user }) => {
     console.log('收到leaveRoom事件，用户:', user.username, 'ID:', user.id, '离开房间:', roomId);
+    console.log(`用户 ${user.id} 离开房间 ${roomId}`);
     
     const room = data.rooms.find(r => r.id === roomId);
     if (!room) {

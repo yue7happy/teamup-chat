@@ -204,6 +204,17 @@ function App() {
     console.log('[currentRoom变化] 当前房间:', currentRoom ? { id: currentRoom.id, name: currentRoom.name, isDefault: currentRoom.isDefault } : null)
   }, [currentRoom])
 
+  // 监听 rooms 状态变化，打印成员信息
+  useEffect(() => {
+    if (rooms.length > 0) {
+      rooms.forEach(room => {
+        if (room.users && room.users.length > 0) {
+          console.log(`更新后的 rooms 状态中房间 ${room.id} 的成员：${room.users.map(u => u.id).join(', ')}`)
+        }
+      })
+    }
+  }, [rooms])
+
   // 检查语音按钮DOM元素
   useEffect(() => {
     console.log('[currentRoom变化] 开始检查DOM，currentRoom:', currentRoom ? { id: currentRoom.id, name: currentRoom.name, isDefault: currentRoom.isDefault } : null)
@@ -931,10 +942,13 @@ function App() {
 
       newSocket.on('roomUsersUpdated', (users) => {
         console.log('收到房间成员更新:', users)
+        const latestCurrentRoom = currentRoomRef.current
+        if (latestCurrentRoom) {
+          console.log(`收到成员更新，房间 ${latestCurrentRoom.id}，成员列表：${users.map(u => u.id).join(', ')}`)
+        }
         setRoomUsers(users)
         // 同时更新当前房间的状态，确保状态同步
         // 使用 ref 获取最新的 currentRoom，避免闭包问题
-        const latestCurrentRoom = currentRoomRef.current
         if (latestCurrentRoom) {
           console.log('[roomUsersUpdated] 当前房间（通过ref获取）:', latestCurrentRoom.id, latestCurrentRoom.name, '是否为大厅:', latestCurrentRoom.isDefault)
           
