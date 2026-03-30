@@ -1,4 +1,4 @@
-﻿const express = require('express');
+const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
@@ -508,27 +508,28 @@ io.on('connection', (socket) => {
     if (currentUser) {
       currentUser.currentRoom = roomId;
       // 更新在线用户的peerId
-      if (user.peerId) {
-        currentUser.peerId = user.peerId;
-      }
+      currentUser.peerId = user.peerId || '';
     }
     socket.join(roomId);
     
     // 更新所有房间中该用户的peerId
     data.rooms.forEach(r => {
       const userInRoom = r.users.find(u => u.id === user.id);
-      if (userInRoom && user.peerId) {
-        userInRoom.peerId = user.peerId;
+      if (userInRoom) {
+        userInRoom.peerId = user.peerId || '';
       }
     });
+    
+    // 更新用户数据中的peerId
+    const userInData = data.users.find(u => u.id === user.id);
+    if (userInData) {
+      userInData.peerId = user.peerId || '';
+    }
     
     saveData(data);
     broadcastRooms();
     
     // 广播更新后的成员列表给房间内所有人，确保包含peerId
-    
-    
-    
     io.to(roomId).emit('roomUsersUpdated', room.users);
   });
   

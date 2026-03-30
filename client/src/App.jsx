@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import io from 'socket.io-client'
 import './App.css'
 
@@ -50,6 +50,10 @@ function App() {
   const voiceControlsRef = useRef(null)
   // 使用 ref 来存储最新的 currentRoom，避免闭包问�?
   const currentRoomRef = useRef(null)
+  // 使用 ref 来存储是否需要向新成员发起呼叫
+  const shouldCallNewMembersRef = useRef(false)
+  // 使用 ref 来存储最新的 isMicOn 状态，避免闭包问�?
+  const isMicOnRef = useRef(false)
 
   useEffect(() => {
     const checkMobile = () => {
@@ -84,17 +88,17 @@ function App() {
     
     // 检查是否已经有 Peer 实例
     if (!window.peer) {
-      // 初始�?PeerJS，使用默认配�?
-      
-      
-      // 使用默认配置，让 PeerJS 自动选择服务�?
+      // 直接使用官方公共服务器 0.peerjs.com
       const peerInitStartTime = performance.now()
-      const newPeer = new Peer()
+      const newPeer = new Peer(undefined, {
+        host: '0.peerjs.com',
+        port: 443,
+        path: '/',
+        secure: true
+      })
       
       newPeer.on('open', (id) => {
         const connectTime = performance.now() - peerInitStartTime
-        
-        
         
         setPeerId(id)
         window.currentPeerId = id
@@ -103,28 +107,12 @@ function App() {
       })
       
       newPeer.on('error', (error) => {
-        console.error(`[${performance.now() - startTime}ms] PeerJS 初始化错�?`, error)
-        // 尝试使用备用配置
-        
-        const fallbackPeer = new Peer(undefined, {
-          host: '0.peerjs.com',
-          port: 443,
-          path: '/',
-          secure: true
-        })
-        fallbackPeer.on('open', (id) => {
-          
-          setPeerId(id)
-          window.currentPeerId = id
-          setPeer(fallbackPeer)
-          window.peer = fallbackPeer
-        })
+        console.error(`[${performance.now() - startTime}ms] PeerJS 初始化错误`, error)
       })
       
       // 设置呼叫处理
       newPeer.on('call', (call) => {
-        
-        // 无论本地是否有流，都要应�?
+        // 无论本地是否有流，都要应答
         // 使用 ref 获取最新的 localStream
         const currentStream = localStreamRef.current
         if (currentStream) {
@@ -147,7 +135,6 @@ function App() {
       
       if (window.currentPeerId) {
         setPeerId(window.currentPeerId)
-        
       }
     }
     
@@ -213,6 +200,11 @@ function App() {
     currentRoomRef.current = currentRoom
     
   }, [currentRoom])
+
+  // 同步 isMicOn �?ref
+  useEffect(() => {
+    isMicOnRef.current = isMicOn
+  }, [isMicOn])
 
   // 监听 rooms 状态变化，打印成员信息
   useEffect(() => {
@@ -340,7 +332,7 @@ function App() {
     const timer = setTimeout(() => {
       // 检查是否有新成员需要呼�?
       roomUsers.forEach(otherUser => {
-        if (otherUser.peerId && otherUser.peerId !== peerId) {
+        if (otherUser.peerId && otherUser.peerId !== peerId && otherUser.peerId.trim() !== '') {
           // 检查是否已经呼叫过
           if (!connections[otherUser.peerId]) {
             
@@ -499,8 +491,9 @@ function App() {
     
     
     
-    // 发送离开房间请求
-    socket.emit('leaveRoom', { roomId: currentRoom.id, user })
+    // 发送离开房间请求，包含 peerId
+    const userWithPeerId = { ...user, peerId: peerId }
+    socket.emit('leaveRoom', { roomId: currentRoom.id, user: userWithPeerId })
     
     // 如果正在开麦，先关闭麦克风
     if (localStream) {
@@ -523,7 +516,7 @@ function App() {
     if (lobbyRoom) {
       // 直接进入大厅，不调用 enterRoom 避免状态不一�?
       
-      socket.emit('enterRoom', { roomId: lobbyRoom.id, user })
+      socket.emit('enterRoom', { roomId: lobbyRoom.id, user: userWithPeerId })
       setCurrentRoom(lobbyRoom)
       setRoomUsers([])
       setMessages([])
@@ -536,7 +529,7 @@ function App() {
       // 清除sessionStorage中的房间信息
       sessionStorage.removeItem('currentRoom')
     }
-  }, [socket, currentRoom, user, rooms, localStream, connections])
+  }, [socket, currentRoom, user, peerId, rooms, localStream, connections])
 
   const changeRoomStatus = useCallback((status) => {
     if (!socket || !currentRoom) {
@@ -716,18 +709,33 @@ function App() {
     }, 100)
   }, [socket, currentRoom, user, messageInput])
 
+  // 发起呼叫的辅助函数
+  const initiateCalls = useCallback((stream, users) => {
+    const currentPeer = window.peer || peer
+    if (!currentPeer || !peerId) return
+    
+    const newConnections = {}
+    users.forEach(otherUser => {
+      if (otherUser.peerId && otherUser.peerId !== peerId && otherUser.peerId.trim() !== '') {
+        try {
+          const call = currentPeer.call(otherUser.peerId, stream)
+          newConnections[otherUser.peerId] = call
+        } catch (error) {
+          console.error('发起呼叫时出�?', error)
+        }
+      }
+    })
+    
+    setConnections(prev => ({ ...prev, ...newConnections }))
+  }, [peer, peerId])
+
   // 开�?闭麦功能
   const toggleMic = async () => {
     const currentPeer = window.peer || peer
     if (!currentPeer || !currentRoom || currentRoom.isDefault) return
     
-    
-    
-    
-    
     if (!isMicOn) {
-      // 开�?
-      
+      // 开麦
       try {
         // 获取麦克风流
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
@@ -739,8 +747,7 @@ function App() {
         // 遍历当前房间的所有其他成员，发起呼叫
         const newConnections = {}
         roomUsers.forEach(otherUser => {
-          if (otherUser.peerId && otherUser.peerId !== peerId) {
-            
+          if (otherUser.peerId && otherUser.peerId !== peerId && otherUser.peerId.trim() !== '') {
             try {
               const call = currentPeer.call(otherUser.peerId, stream)
               newConnections[otherUser.peerId] = call
@@ -753,6 +760,8 @@ function App() {
         setIsMicOn(true)
         // 保存开麦状态到 sessionStorage
         sessionStorage.setItem('isMicOn', 'true')
+        // 设置标志，表示需要向新成员发起呼叫
+        shouldCallNewMembersRef.current = true
         
       } catch (error) {
         console.error('获取麦克风权限失�?', error)
@@ -761,7 +770,7 @@ function App() {
     } else {
       // 闭麦
       
-      // 停止音频�?
+      // 停止音频流
       if (localStream) {
         localStream.getTracks().forEach(track => track.stop())
         setLocalStream(null)
@@ -769,12 +778,14 @@ function App() {
         localStreamRef.current = null
       }
       
-      // 关闭所有连�?
+      // 关闭所有连接
       Object.values(connections).forEach(call => call.close())
       setConnections({})
       setIsMicOn(false)
-      // 清除开麦状�?
+      // 清除开麦状态
       sessionStorage.removeItem('isMicOn')
+      // 重置标志
+      shouldCallNewMembersRef.current = false
       
     }
   }
@@ -962,6 +973,12 @@ function App() {
           
         }
         setRoomUsers(users)
+        
+        // 如果用户正在开麦且需要向新成员发起呼叫
+        if (isMicOnRef.current && localStreamRef.current && shouldCallNewMembersRef.current) {
+          initiateCalls(localStreamRef.current, users)
+        }
+        
         // 同时更新当前房间的状态，确保状态同�?
         // 使用 ref 获取最新的 currentRoom，避免闭包问�?
         if (latestCurrentRoom) {
