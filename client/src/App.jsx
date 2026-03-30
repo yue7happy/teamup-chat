@@ -503,6 +503,14 @@ function App() {
     // 关闭所有连�?
     Object.values(connections).forEach(call => call.close())
     setConnections({})
+    // 停止所有远程音�?
+    Object.values(remoteAudios).forEach(audio => {
+      if (audio) {
+        audio.pause()
+        audio.srcObject = null
+      }
+    })
+    setRemoteAudios({})
     setIsMicOn(false)
     setIsDeafen(false)
     // 清除开麦和闭听状�?
@@ -529,7 +537,7 @@ function App() {
       // 清除sessionStorage中的房间信息
       sessionStorage.removeItem('currentRoom')
     }
-  }, [socket, currentRoom, user, peerId, rooms, localStream, connections])
+  }, [socket, currentRoom, user, peerId, rooms, localStream, connections, remoteAudios])
 
   const changeRoomStatus = useCallback((status) => {
     if (!socket || !currentRoom) {
