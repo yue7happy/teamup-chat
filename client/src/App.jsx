@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+﻿import { useState, useEffect, useCallback, useRef } from 'react'
 import io from 'socket.io-client'
 import './App.css'
 
@@ -48,7 +48,7 @@ function App() {
   const hasRestoredMicRef = useRef(false)
   const localStreamRef = useRef(null)
   const voiceControlsRef = useRef(null)
-  // 使用 ref 来存储最新的 currentRoom，避免闭包问题
+  // 使用 ref 来存储最新的 currentRoom，避免闭包问�?
   const currentRoomRef = useRef(null)
 
   useEffect(() => {
@@ -61,40 +61,40 @@ function App() {
   }, [])
 
   // 页面开始加载时
-  console.log('开始加载', Date.now())
+  
 
   // 初始化时间戳
   const startTime = performance.now()
 
-  // 立即从sessionStorage读取状态
+  // 立即从sessionStorage读取状�?
   useEffect(() => {
-    console.log(`[${performance.now() - startTime}ms] 开始初始化应用`)
     
-    // 立即从sessionStorage读取上次的用户和开麦状态
+    
+    // 立即从sessionStorage读取上次的用户和开麦状�?
     const storedUser = sessionStorage.getItem('user')
     const storedMicState = sessionStorage.getItem('isMicOn')
     
-    console.log(`[${performance.now() - startTime}ms] 从sessionStorage读取状态完成`)
+    
     
     if (storedUser) {
       const parsedUser = JSON.parse(storedUser)
       setUser(parsedUser)
-      console.log(`[${performance.now() - startTime}ms] 用户状态已恢复`)
+      
     }
     
     // 检查是否已经有 Peer 实例
     if (!window.peer) {
-      // 初始化 PeerJS，使用默认配置
-      console.log(`[${performance.now() - startTime}ms] 开始初始化 PeerJS`)
+      // 初始�?PeerJS，使用默认配�?
       
-      // 使用默认配置，让 PeerJS 自动选择服务器
+      
+      // 使用默认配置，让 PeerJS 自动选择服务�?
       const peerInitStartTime = performance.now()
       const newPeer = new Peer()
       
       newPeer.on('open', (id) => {
         const connectTime = performance.now() - peerInitStartTime
-        console.log(`[${performance.now() - startTime}ms] PeerJS 初始化成功，耗时: ${connectTime.toFixed(2)}ms, ID:`, id)
-        console.log('PeerJS 初始化成功', Date.now())
+        
+        
         
         setPeerId(id)
         window.currentPeerId = id
@@ -103,9 +103,9 @@ function App() {
       })
       
       newPeer.on('error', (error) => {
-        console.error(`[${performance.now() - startTime}ms] PeerJS 初始化错误:`, error)
+        console.error(`[${performance.now() - startTime}ms] PeerJS 初始化错�?`, error)
         // 尝试使用备用配置
-        console.log('尝试使用备用配置...')
+        
         const fallbackPeer = new Peer(undefined, {
           host: '0.peerjs.com',
           port: 443,
@@ -113,7 +113,7 @@ function App() {
           secure: true
         })
         fallbackPeer.on('open', (id) => {
-          console.log(`[${performance.now() - startTime}ms] 备用配置 PeerJS 初始化成功，ID:`, id)
+          
           setPeerId(id)
           window.currentPeerId = id
           setPeer(fallbackPeer)
@@ -123,8 +123,8 @@ function App() {
       
       // 设置呼叫处理
       newPeer.on('call', (call) => {
-        console.log('收到呼叫，来自：', call.peer)
-        // 无论本地是否有流，都要应答
+        
+        // 无论本地是否有流，都要应�?
         // 使用 ref 获取最新的 localStream
         const currentStream = localStreamRef.current
         if (currentStream) {
@@ -134,32 +134,32 @@ function App() {
         }
         // 监听远程流并播放
         call.on('stream', (remoteStream) => {
-          console.log('收到远程流，来自：', call.peer)
+          
           const audio = new Audio()
           audio.srcObject = remoteStream
           audio.play()
-          console.log('开始播放对方声音')
+          
           // 保存音频元素引用
           setRemoteAudios(prev => ({ ...prev, [call.peer]: audio }))
         })
       })
     } else {
-      console.log(`[${performance.now() - startTime}ms] PeerJS 实例已存在，复用现有实例`)
+      
       if (window.currentPeerId) {
         setPeerId(window.currentPeerId)
-        console.log('PeerJS 初始化成功', Date.now())
+        
       }
     }
     
-    // 并行获取用户列表和房间列表
+    // 并行获取用户列表和房间列�?
     Promise.all([
       // 获取用户列表
       fetch(`${API_URL}/api/users`)
         .then(res => res.json())
         .then(data => {
-          console.log(`[${performance.now() - startTime}ms] 获取用户列表成功:`, data)
+          
           setUsers(data)
-          console.log('用户列表加载完成', Date.now())
+          
         })
         .catch(err => {
           console.error('获取用户列表失败:', err)
@@ -169,28 +169,28 @@ function App() {
       fetch(`${API_URL}/api/rooms`)
         .then(res => res.json())
         .then(data => {
-          console.log(`[${performance.now() - startTime}ms] 获取房间列表成功:`, data)
+          
           setRooms(data)
           
-          // 从后端数据中恢复房间状态，不使用本地缓存的房间状态
+          // 从后端数据中恢复房间状态，不使用本地缓存的房间状�?
           const storedRoom = sessionStorage.getItem('currentRoom')
           if (storedRoom) {
             try {
               const parsedRoom = JSON.parse(storedRoom)
               const updatedRoom = data.find(r => r.id === parsedRoom.id)
               if (updatedRoom) {
-                // 确保 isDefault 属性存在
+                // 确保 isDefault 属性存�?
                 const roomWithIsDefault = { ...updatedRoom, isDefault: updatedRoom.isDefault || false }
-                console.log(`[${performance.now() - startTime}ms] 房间状态已更新为最新数据:`, roomWithIsDefault.id, roomWithIsDefault.name, '状态:', roomWithIsDefault.status, '计时器:', roomWithIsDefault.timer)
+                
                 setCurrentRoom(roomWithIsDefault)
                 sessionStorage.setItem('currentRoom', JSON.stringify(roomWithIsDefault))
               } else {
-                // 房间不存在了，清空本地缓存
+                // 房间不存在了，清空本地缓�?
                 sessionStorage.removeItem('currentRoom')
                 setCurrentRoom(null)
               }
             } catch (error) {
-              console.error('更新房间状态失败:', error)
+              console.error('更新房间状态失�?', error)
               sessionStorage.removeItem('currentRoom')
               setCurrentRoom(null)
             }
@@ -200,7 +200,7 @@ function App() {
           console.error('获取房间列表失败:', err)
         })
     ]).then(() => {
-      console.log(`[${performance.now() - startTime}ms] 所有初始化操作完成`)
+      
     })
     
     return () => {
@@ -208,10 +208,10 @@ function App() {
     }
   }, [])
 
-  // 同步 currentRoom 到 ref
+  // 同步 currentRoom �?ref
   useEffect(() => {
     currentRoomRef.current = currentRoom
-    console.log('[currentRoom变化] 当前房间:', currentRoom ? { id: currentRoom.id, name: currentRoom.name, isDefault: currentRoom.isDefault } : null)
+    
   }, [currentRoom])
 
   // 监听 rooms 状态变化，打印成员信息
@@ -219,7 +219,7 @@ function App() {
     if (rooms.length > 0) {
       rooms.forEach(room => {
         if (room.users && room.users.length > 0) {
-          console.log(`更新后的 rooms 状态中房间 ${room.id} 的成员：${room.users.map(u => u.id).join(', ')}`)
+          
         }
       })
     }
@@ -227,63 +227,48 @@ function App() {
 
   // 检查语音按钮DOM元素
   useEffect(() => {
-    console.log('[currentRoom变化] 开始检查DOM，currentRoom:', currentRoom ? { id: currentRoom.id, name: currentRoom.name, isDefault: currentRoom.isDefault } : null)
+    
     if (currentRoom && !currentRoom.isDefault) {
-      console.log('[currentRoom变化] 进入子房间，开始DOM检查')
-      // 延迟检查，确保DOM已更新
+      
+      // 延迟检查，确保DOM已更�?
       const checkIntervals = [100, 300, 500, 1000, 2000]
       checkIntervals.forEach((delay, index) => {
         setTimeout(() => {
           const voiceControls = document.querySelector('.voice-controls')
-          console.log(`[DOM检查 ${delay}ms] 语音按钮容器元素:`, voiceControls)
+          
           if (voiceControls) {
             const rect = voiceControls.getBoundingClientRect()
             const computedStyle = window.getComputedStyle(voiceControls)
-            console.log(`[DOM检查 ${delay}ms] 语音按钮容器位置:`, { top: rect.top, left: rect.left, width: rect.width, height: rect.height })
-            console.log(`[DOM检查 ${delay}ms] 语音按钮容器样式:`, { 
-              display: computedStyle.display, 
-              visibility: computedStyle.visibility, 
-              opacity: computedStyle.opacity,
-              zIndex: computedStyle.zIndex
-            })
             const buttons = voiceControls.querySelectorAll('button')
-            console.log(`[DOM检查 ${delay}ms] 语音按钮数量:`, buttons.length)
+            
             buttons.forEach((btn, btnIndex) => {
               const btnRect = btn.getBoundingClientRect()
               const btnStyle = window.getComputedStyle(btn)
-              console.log(`[DOM检查 ${delay}ms] 按钮${btnIndex + 1}:`, btn.textContent, {
-                top: btnRect.top,
-                left: btnRect.left,
-                width: btnRect.width,
-                height: btnRect.height,
-                display: btnStyle.display,
-                visibility: btnStyle.visibility
-              })
             })
           } else {
-            console.log(`[DOM检查 ${delay}ms] 未找到语音按钮容器元素`)
+            
           }
         }, delay)
       })
     } else {
-      console.log('[currentRoom变化] 不在子房间，跳过DOM检查')
+      
     }
   }, [currentRoom])
 
-  // 恢复开麦状态 - 当用户进入房间后检查是否需要恢复开麦
+  // 恢复开麦状�?- 当用户进入房间后检查是否需要恢复开�?
   useEffect(() => {
     const restoreMicState = async () => {
       // 检查是否已经恢复过
       if (hasRestoredMicRef.current) return
       
-      // 确保已经进入房间且不是大厅
+      // 确保已经进入房间且不是大�?
       if (!currentRoom || currentRoom.isDefault) return
       
-      // 确保已经有 peer 实例
+      // 确保已经�?peer 实例
       const currentPeer = window.peer || peer
       if (!currentPeer) return
       
-      // 确保已经有 peerId
+      // 确保已经�?peerId
       if (!peerId) return
       
       // 确保房间成员列表已经加载
@@ -292,23 +277,23 @@ function App() {
       // 标记已经尝试恢复
       hasRestoredMicRef.current = true
       
-      // 检查是否需要恢复闭听状态
+      // 检查是否需要恢复闭听状�?
       const savedDeafenState = sessionStorage.getItem('isDeafen')
       if (savedDeafenState === 'true') {
         setIsDeafen(true)
-        console.log('闭听状态已恢复')
+        
       }
       
-      // 检查是否需要恢复开麦状态
+      // 检查是否需要恢复开麦状�?
       const savedMicState = sessionStorage.getItem('isMicOn')
       if (savedMicState !== 'true') return
       
-      console.log('检测到需要恢复开麦状态，正在恢复...')
+      
       
       try {
         // 获取麦克风流
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-        console.log('麦克风已获取（恢复状态）')
+        
         setLocalStream(stream)
         // 同时更新 ref
         localStreamRef.current = stream
@@ -317,24 +302,24 @@ function App() {
         const newConnections = {}
         roomUsers.forEach(otherUser => {
           if (otherUser.peerId && otherUser.peerId !== peerId) {
-            console.log('恢复状态：发起呼叫给：', otherUser.peerId)
+            
             try {
               const call = currentPeer.call(otherUser.peerId, stream)
               newConnections[otherUser.peerId] = call
             } catch (error) {
-              console.error('恢复状态：发起呼叫时出错:', error)
+              console.error('恢复状态：发起呼叫时出�?', error)
             }
           }
         })
         setConnections(newConnections)
         setIsMicOn(true)
-        console.log('开麦状态已恢复')
-        console.log('开麦状态恢复完成', Date.now())
+        
+        
       } catch (error) {
-        console.error('恢复开麦状态失败:', error)
-        // 恢复失败，清除保存的状态
+        console.error('恢复开麦状态失�?', error)
+        // 恢复失败，清除保存的状�?
         sessionStorage.removeItem('isMicOn')
-        // 重置标记，允许下次尝试
+        // 重置标记，允许下次尝�?
         hasRestoredMicRef.current = false
       }
     }
@@ -345,25 +330,25 @@ function App() {
 
   // 当房间成员变化时，如果有新成员加入且当前正在开麦，向新成员发起呼叫
   useEffect(() => {
-    // 只有在开麦状态下才处理
+    // 只有在开麦状态下才处�?
     if (!isMicOn || !localStreamRef.current) return
     
     const currentPeer = window.peer || peer
     if (!currentPeer || !peerId) return
     
-    // 延迟执行，确保新成员已经准备好接收呼叫
+    // 延迟执行，确保新成员已经准备好接收呼�?
     const timer = setTimeout(() => {
-      // 检查是否有新成员需要呼叫
+      // 检查是否有新成员需要呼�?
       roomUsers.forEach(otherUser => {
         if (otherUser.peerId && otherUser.peerId !== peerId) {
           // 检查是否已经呼叫过
           if (!connections[otherUser.peerId]) {
-            console.log('检测到新成员加入，发起呼叫给：', otherUser.peerId)
+            
             try {
               const call = currentPeer.call(otherUser.peerId, localStreamRef.current)
               setConnections(prev => ({ ...prev, [otherUser.peerId]: call }))
             } catch (error) {
-              console.error('向新成员发起呼叫时出错:', error)
+              console.error('向新成员发起呼叫时出�?', error)
             }
           }
         }
@@ -384,11 +369,11 @@ function App() {
   }
 
   const fetchUsers = async () => {
-    console.log('开始执行fetchUsers()')
+    
     try {
       const res = await fetch(`${API_URL}/api/users`)
       const data = await res.json()
-      console.log('获取用户列表成功:', data)
+      
       setUsers(data)
     } catch (err) {
       console.error('获取用户列表失败:', err)
@@ -464,24 +449,24 @@ function App() {
   }
 
   const enterRoom = useCallback((room) => {
-    console.log('[enterRoom] 进入房间，房间ID:', room.id, '房间名称:', room.name, '是否为大厅:', room.isDefault)
+    
     if (!socket) {
-      console.log('[enterRoom] socket 不存在，无法进入房间')
+      
       return
     }
     
     // 如果当前在房间中，先清理语音连接
     if (currentRoom && currentRoom.id !== room.id) {
-      console.log('切换房间，清理语音连接...')
+      
       // 停止本地麦克风流
       if (localStream) {
         localStream.getTracks().forEach(track => track.stop())
         setLocalStream(null)
       }
-      // 关闭所有 WebRTC 连接
+      // 关闭所�?WebRTC 连接
       Object.values(connections).forEach(call => call.close())
       setConnections({})
-      // 停止所有远程音频
+      // 停止所有远程音�?
       Object.values(remoteAudios).forEach(audio => {
         if (audio) {
           audio.pause()
@@ -489,7 +474,7 @@ function App() {
         }
       })
       setRemoteAudios({})
-      // 重置开麦状态
+      // 重置开麦状�?
       setIsMicOn(false)
       sessionStorage.removeItem('isMicOn')
       // 重置恢复标记
@@ -498,12 +483,12 @@ function App() {
       socket.emit('leaveRoom', { roomId: currentRoom.id, user })
     }
     
-    // 发送 enterRoom 事件时包含 peerId
+    // 发�?enterRoom 事件时包�?peerId
     const userWithPeerId = { ...user, peerId: peerId }
-    console.log('发送 enterRoom 事件:', { roomId: room.id, user: userWithPeerId })
+    
     socket.emit('enterRoom', { roomId: room.id, user: userWithPeerId })
     setCurrentRoom(room)
-    // 清空消息列表，只显示当前房间的消息
+    // 清空消息列表，只显示当前房间的消�?
     setMessages([])
     // 保存当前房间到sessionStorage
     sessionStorage.setItem('currentRoom', JSON.stringify(room))
@@ -512,7 +497,7 @@ function App() {
   const leaveRoom = useCallback(() => {
     if (!socket || !currentRoom) return
     
-    console.log('离开房间，清理语音连接...')
+    
     
     // 发送离开房间请求
     socket.emit('leaveRoom', { roomId: currentRoom.id, user })
@@ -522,12 +507,12 @@ function App() {
       localStream.getTracks().forEach(track => track.stop())
       setLocalStream(null)
     }
-    // 关闭所有连接
+    // 关闭所有连�?
     Object.values(connections).forEach(call => call.close())
     setConnections({})
     setIsMicOn(false)
     setIsDeafen(false)
-    // 清除开麦和闭听状态
+    // 清除开麦和闭听状�?
     sessionStorage.removeItem('isMicOn')
     sessionStorage.removeItem('isDeafen')
     // 重置恢复标记
@@ -536,15 +521,15 @@ function App() {
     // 找到大厅房间
     const lobbyRoom = rooms.find(room => room.isDefault)
     if (lobbyRoom) {
-      // 直接进入大厅，不调用 enterRoom 避免状态不一致
-      console.log('进入大厅:', lobbyRoom)
+      // 直接进入大厅，不调用 enterRoom 避免状态不一�?
+      
       socket.emit('enterRoom', { roomId: lobbyRoom.id, user })
       setCurrentRoom(lobbyRoom)
       setRoomUsers([])
       setMessages([])
       sessionStorage.setItem('currentRoom', JSON.stringify(lobbyRoom))
     } else {
-      // 如果找不到大厅，清除房间状态
+      // 如果找不到大厅，清除房间状�?
       setCurrentRoom(null)
       setRoomUsers([])
       setMessages([])
@@ -555,22 +540,22 @@ function App() {
 
   const changeRoomStatus = useCallback((status) => {
     if (!socket || !currentRoom) {
-      console.log('changeRoomStatus: socket 或 currentRoom 不存在');
+      
       return;
     }
     
-    console.log('changeRoomStatus: 开始更新房间状态，房间ID:', currentRoom.id, '新状态:', status, '用户:', user.username);
     
-    // 立即更新本地状态，让按钮颜色立即变化
+    
+    // 立即更新本地状态，让按钮颜色立即变�?
     const updatedRoom = { ...currentRoom, status }
     setCurrentRoom(updatedRoom)
     // 保存到sessionStorage
     sessionStorage.setItem('currentRoom', JSON.stringify(updatedRoom))
     
     // 发送到服务器，包含用户信息
-    console.log('changeRoomStatus: 发送 changeRoomStatus 事件到服务器');
+    
     socket.emit('changeRoomStatus', { roomId: currentRoom.id, status, user })
-    console.log('changeRoomStatus: 事件发送完成');
+    
   }, [socket, currentRoom, user])
 
   const handleRoomClick = (room) => {
@@ -586,44 +571,44 @@ function App() {
   }
 
   const handleDeleteRoom = (roomId, roomName) => {
-    console.log('开始执行handleDeleteRoom，房间ID:', roomId, '房间名称:', roomName);
+    
     setRoomToDelete({ id: roomId, name: roomName });
     setShowDeleteConfirm(true);
   }
 
   const confirmDeleteRoom = async () => {
     if (roomToDelete) {
-      console.log('用户确认删除，准备发送请求，房间ID:', roomToDelete.id, '房间名称:', roomToDelete.name);
+      
       try {
         const res = await fetch(`${API_URL}/api/rooms/${roomToDelete.id}`, {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' }
         })
         const data = await res.json()
-        console.log('删除请求结果:', data);
+        
         if (!data.success) {
           alert(data.message || '删除房间失败')
         }
         setShowDeleteConfirm(false);
         setRoomToDelete(null);
-        // 重置删除模式，使按钮变回「删除房间」
+        // 重置删除模式，使按钮变回「删除房间�?
         setShowDeleteRoom(false);
       } catch (err) {
         console.error('删除房间失败:', err);
         alert('网络错误，请稍后重试');
         setShowDeleteConfirm(false);
         setRoomToDelete(null);
-        // 重置删除模式，使按钮变回「删除房间」
+        // 重置删除模式，使按钮变回「删除房间�?
         setShowDeleteRoom(false);
       }
     }
   }
 
   const cancelDeleteRoom = () => {
-    console.log('用户取消删除');
+    
     setShowDeleteConfirm(false);
     setRoomToDelete(null);
-    // 重置删除模式，使按钮变回「删除房间」
+    // 重置删除模式，使按钮变回「删除房间�?
     setShowDeleteRoom(false);
   }
 
@@ -686,13 +671,13 @@ function App() {
     if (socket) {
       socket.close()
     }
-    // 如果正在开麦，关闭麦克风
+    // 如果正在开麦，关闭麦克�?
     if (localStream) {
       localStream.getTracks().forEach(track => track.stop())
     }
-    // 关闭所有连接
+    // 关闭所有连�?
     Object.values(connections).forEach(call => call.close())
-    // 清除sessionStorage中的用户信息和房间信息
+    // 清除sessionStorage中的用户信息和房间信�?
     sessionStorage.removeItem('user')
     sessionStorage.removeItem('currentRoom')
     sessionStorage.removeItem('isMicOn')
@@ -722,7 +707,7 @@ function App() {
     socket.emit('send_message', message)
     setMessageInput('')
     
-    // 自动滚动到底部
+    // 自动滚动到底�?
     setTimeout(() => {
       const chatMessages = document.querySelector('.chat-messages')
       if (chatMessages) {
@@ -731,22 +716,22 @@ function App() {
     }, 100)
   }, [socket, currentRoom, user, messageInput])
 
-  // 开麦/闭麦功能
+  // 开�?闭麦功能
   const toggleMic = async () => {
     const currentPeer = window.peer || peer
     if (!currentPeer || !currentRoom || currentRoom.isDefault) return
     
-    console.log('使用的 peer 实例：', currentPeer)
-    console.log('window.peer 实例：', window.peer)
-    console.log('state 中的 peer 实例：', peer)
+    
+    
+    
     
     if (!isMicOn) {
-      // 开麦
-      console.log('正在打开麦克风...')
+      // 开�?
+      
       try {
         // 获取麦克风流
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-        console.log('麦克风已获取')
+        
         setLocalStream(stream)
         // 同时更新 ref
         localStreamRef.current = stream
@@ -755,12 +740,12 @@ function App() {
         const newConnections = {}
         roomUsers.forEach(otherUser => {
           if (otherUser.peerId && otherUser.peerId !== peerId) {
-            console.log('发起呼叫给：', otherUser.peerId)
+            
             try {
               const call = currentPeer.call(otherUser.peerId, stream)
               newConnections[otherUser.peerId] = call
             } catch (error) {
-              console.error('发起呼叫时出错:', error)
+              console.error('发起呼叫时出�?', error)
             }
           }
         })
@@ -768,15 +753,15 @@ function App() {
         setIsMicOn(true)
         // 保存开麦状态到 sessionStorage
         sessionStorage.setItem('isMicOn', 'true')
-        console.log('麦克风已打开，已向房间成员发起呼叫')
+        
       } catch (error) {
-        console.error('获取麦克风权限失败:', error)
+        console.error('获取麦克风权限失�?', error)
         alert('无法获取麦克风权限，请检查浏览器设置')
       }
     } else {
       // 闭麦
-      console.log('正在关闭麦克风...')
-      // 停止音频流
+      
+      // 停止音频�?
       if (localStream) {
         localStream.getTracks().forEach(track => track.stop())
         setLocalStream(null)
@@ -784,23 +769,23 @@ function App() {
         localStreamRef.current = null
       }
       
-      // 关闭所有连接
+      // 关闭所有连�?
       Object.values(connections).forEach(call => call.close())
       setConnections({})
       setIsMicOn(false)
-      // 清除开麦状态
+      // 清除开麦状�?
       sessionStorage.removeItem('isMicOn')
-      console.log('麦克风已关闭')
+      
     }
   }
 
-  // 闭听/开听功能
+  // 闭听/开听功�?
   const toggleDeafen = () => {
     if (!currentRoom || currentRoom.isDefault) return
     
     if (!isDeafen) {
-      // 闭听 - 暂停所有远程音频
-      console.log('正在闭听...')
+      // 闭听 - 暂停所有远程音�?
+      
       Object.values(remoteAudios).forEach(audio => {
         if (audio && !audio.paused) {
           audio.pause()
@@ -808,10 +793,10 @@ function App() {
       })
       setIsDeafen(true)
       sessionStorage.setItem('isDeafen', 'true')
-      console.log('已闭听，停止播放远程声音')
+      
     } else {
-      // 开听 - 恢复播放所有远程音频
-      console.log('正在开听...')
+      // 开�?- 恢复播放所有远程音�?
+      
       Object.values(remoteAudios).forEach(audio => {
         if (audio && audio.paused) {
           audio.play()
@@ -819,7 +804,7 @@ function App() {
       })
       setIsDeafen(false)
       sessionStorage.removeItem('isDeafen')
-      console.log('已开听，恢复播放远程声音')
+      
     }
   }
 
@@ -828,28 +813,28 @@ function App() {
     const currentPeer = window.peer || peer
     if (!currentPeer || !currentRoom || currentRoom.isDefault) return
     
-    console.log('使用的 peer 实例：', currentPeer)
-    console.log('window.peer 实例：', window.peer)
-    console.log('state 中的 peer 实例：', peer)
+    
+    
+    
     
     // 从当前房间成员列表中获取另一个用户的 peerId
     const otherUser = roomUsers.find(user => user.peerId && user.peerId !== peerId)
     if (otherUser) {
-      console.log('发起呼叫给：', otherUser.peerId)
+      
       try {
         currentPeer.call(otherUser.peerId, null)
       } catch (error) {
-        console.error('发起呼叫时出错:', error)
+        console.error('发起呼叫时出�?', error)
       }
     } else {
-      console.log('当前房间没有其他在线用户')
+      
     }
   }
 
-  // WebSocket 连接和事件处理
+  // WebSocket 连接和事件处�?
   useEffect(() => {
     if (user) {
-      console.log(`[${performance.now() - startTime}ms] 开始建立 WebSocket 连接`)
+      
       
       // 保存用户信息到sessionStorage
       sessionStorage.setItem('user', JSON.stringify(user))
@@ -858,71 +843,71 @@ function App() {
         transports: ['websocket'],
         reconnection: false
       })
-      console.log(`[${performance.now() - startTime}ms] WebSocket 实例已创建`)
+      
       setSocket(newSocket)
 
       newSocket.on('connect', () => {
-        console.log(`[${performance.now() - startTime}ms] WebSocket 连接已建立，socket.id:`, newSocket.id)
-        console.log('WebSocket 连接成功', Date.now())
-        // 发送 join 事件时包含 peerId
-        const userWithPeerId = { ...user, peerId: peerId }
-        console.log('准备发送join事件:', userWithPeerId)
-        newSocket.emit('join', userWithPeerId)
-        console.log('join事件已发送')
         
-        // 如果已经有 peerId，发送 update-peer-id 事件
+        
+        // 发�?join 事件时包�?peerId
+        const userWithPeerId = { ...user, peerId: peerId }
+        
+        newSocket.emit('join', userWithPeerId)
+        
+        
+        // 如果已经�?peerId，发�?update-peer-id 事件
         if (peerId) {
-          console.log('WebSocket连接建立，发送 update-peer-id 事件，用户ID:', user.id, 'peerId:', peerId)
+          
           newSocket.emit('update-peer-id', { userId: user.id, peerId: peerId })
         }
         
-        // 先获取最新的房间列表，然后恢复房间状态
+        // 先获取最新的房间列表，然后恢复房间状�?
         fetch(`${API_URL}/api/rooms`)
           .then(res => res.json())
           .then(updatedRooms => {
-            console.log('[恢复房间] 获取最新房间列表:', updatedRooms)
+            
             setRooms(updatedRooms)
             
-            // 尝试从sessionStorage中恢复房间状态，但使用后端返回的最新数据
+            // 尝试从sessionStorage中恢复房间状态，但使用后端返回的最新数�?
             const savedRoom = sessionStorage.getItem('currentRoom')
-            console.log('[恢复房间] sessionStorage中的房间:', savedRoom ? JSON.parse(savedRoom) : null)
+            
             
             if (savedRoom) {
               try {
                 const parsedRoom = JSON.parse(savedRoom)
-                console.log('[恢复房间] 尝试恢复房间状态:', parsedRoom.id, parsedRoom.name, '是否为大厅:', parsedRoom.isDefault)
                 
-                // 检查房间是否仍然存在，使用后端返回的最新数据
+                
+                // 检查房间是否仍然存在，使用后端返回的最新数�?
                 const roomExists = updatedRooms.find(r => r.id === parsedRoom.id)
                 if (roomExists) {
-                  // 确保 isDefault 属性存在
+                  // 确保 isDefault 属性存�?
                   const roomWithIsDefault = { ...roomExists, isDefault: roomExists.isDefault || false }
-                  console.log('[恢复房间] 房间存在，使用后端最新数据:', roomWithIsDefault.id, roomWithIsDefault.name, '状态:', roomWithIsDefault.status, '计时器:', roomWithIsDefault.timer, '是否为大厅:', roomWithIsDefault.isDefault)
+                  
                   // 更新 currentRoom 为最新的房间信息
                   setCurrentRoom(roomWithIsDefault)
                   sessionStorage.setItem('currentRoom', JSON.stringify(roomWithIsDefault))
-                  console.log('[恢复房间] 房间状态已更新为后端最新数据:', roomWithIsDefault.id, roomWithIsDefault.name)
                   
-                  // 延迟进入房间，确保 peerId 已经获取
+                  
+                  // 延迟进入房间，确�?peerId 已经获取
                   const enterRoomWithDelay = () => {
                     const currentPeerId = window.currentPeerId || peerId
-                    console.log('[恢复房间] 准备进入房间，当前peerId:', currentPeerId)
+                    
                     if (currentPeerId) {
                       const userWithPeerId = { ...user, peerId: currentPeerId }
-                      console.log('[恢复房间] 发送 enterRoom 事件（恢复房间）:', { roomId: roomWithIsDefault.id, user: userWithPeerId })
+                      
                       newSocket.emit('enterRoom', { roomId: roomWithIsDefault.id, user: userWithPeerId })
-                      // 同时发送 update-peer-id 确保 peerId 已更新
+                      // 同时发�?update-peer-id 确保 peerId 已更�?
                       newSocket.emit('update-peer-id', { userId: user.id, peerId: currentPeerId })
                     } else {
-                      // 如果还没有 peerId，延迟重试
-                      console.log('[恢复房间] 等待 peerId 获取...')
+                      // 如果还没�?peerId，延迟重�?
+                      
                       setTimeout(enterRoomWithDelay, 500)
                       return
                     }
                   }
                   enterRoomWithDelay()
                 } else {
-                  // 房间不存在了，进入大厅
+                  // 房间不存在了，进入大�?
                   const lobbyRoom = updatedRooms.find(room => room.isDefault)
                   if (lobbyRoom) {
                     newSocket.emit('enterRoom', { roomId: lobbyRoom.id, user })
@@ -931,7 +916,7 @@ function App() {
                   }
                 }
               } catch (error) {
-                console.error('恢复房间状态失败:', error)
+                console.error('恢复房间状态失�?', error)
                 sessionStorage.removeItem('currentRoom')
                 
                 // 进入默认大厅
@@ -946,7 +931,7 @@ function App() {
               // 没有保存的房间状态，进入默认大厅
               const lobbyRoom = updatedRooms.find(room => room.isDefault)
               if (lobbyRoom) {
-                console.log('自动进入默认大厅:', lobbyRoom)
+                
                 newSocket.emit('enterRoom', { roomId: lobbyRoom.id, user })
                 setCurrentRoom(lobbyRoom)
                 sessionStorage.setItem('currentRoom', JSON.stringify(lobbyRoom))
@@ -963,7 +948,7 @@ function App() {
       })
 
       newSocket.on('disconnect', (reason) => {
-        console.log('WebSocket连接已断开，原因:', reason)
+        
       })
 
       newSocket.on('roomsUpdated', (updatedRooms) => {
@@ -971,29 +956,29 @@ function App() {
       })
 
       newSocket.on('roomUsersUpdated', (users) => {
-        console.log('收到房间成员更新:', users)
+        
         const latestCurrentRoom = currentRoomRef.current
         if (latestCurrentRoom) {
-          console.log(`收到成员更新，房间 ${latestCurrentRoom.id}，成员列表：${users.map(u => u.id).join(', ')}`)
+          
         }
         setRoomUsers(users)
-        // 同时更新当前房间的状态，确保状态同步
-        // 使用 ref 获取最新的 currentRoom，避免闭包问题
+        // 同时更新当前房间的状态，确保状态同�?
+        // 使用 ref 获取最新的 currentRoom，避免闭包问�?
         if (latestCurrentRoom) {
-          console.log('[roomUsersUpdated] 当前房间（通过ref获取）:', latestCurrentRoom.id, latestCurrentRoom.name, '是否为大厅:', latestCurrentRoom.isDefault)
+          
           
           fetch(`${API_URL}/api/rooms`)
             .then(res => res.json())
             .then(updatedRooms => {
-              console.log('更新后的房间列表:', updatedRooms)
+              
               setRooms(updatedRooms)
               const updatedRoom = updatedRooms.find(r => r.id === latestCurrentRoom.id)
               if (updatedRoom) {
-                console.log('更新后的当前房间完整信息:', updatedRoom)
-                console.log('更新后的当前房间:', updatedRoom.id, updatedRoom.name, 'isDefault:', updatedRoom.isDefault, updatedRoom.users ? updatedRoom.users.map(u => u.username) : [])
-                // 确保 isDefault 属性存在
+                
+                
+                // 确保 isDefault 属性存�?
                 const roomWithIsDefault = { ...updatedRoom, isDefault: updatedRoom.isDefault || false }
-                console.log('添加 isDefault 属性后的房间:', roomWithIsDefault)
+                
                 setCurrentRoom(roomWithIsDefault)
                 sessionStorage.setItem('currentRoom', JSON.stringify(roomWithIsDefault))
               }
@@ -1003,34 +988,33 @@ function App() {
 
       // 监听用户添加成功事件
       newSocket.on('user_added', (data) => {
-        console.log('收到user_added事件:', data)
-        console.log('准备调用fetchUsers()')
+
+
         fetchUsers()
       })
 
       // 监听房间删除事件
       newSocket.on('room_deleted', (data) => {
-        console.log('收到room_deleted事件:', data)
-        console.log('当前房间:', currentRoom)
+
+
         // 重新获取房间列表
         fetch(`${API_URL}/api/rooms`)
           .then(res => res.json())
           .then(updatedRooms => {
-            console.log('获取到的房间列表:', updatedRooms)
             setRooms(updatedRooms)
-            // 只有当当前在被删除的房间中时，才切换到大厅
+            // 只有当当前在被删除的房间中时，才切换到大�?
             if (currentRoom && currentRoom.id === data.roomId) {
               // 找到默认大厅房间
               const lobbyRoom = updatedRooms.find(room => room.isDefault)
-              console.log('找到的大厅:', lobbyRoom)
+              
               if (lobbyRoom) {
-                console.log('当前在被删除的房间中，自动进入大厅:', lobbyRoom)
+                
                 newSocket.emit('enterRoom', { roomId: lobbyRoom.id, user })
-                console.log('设置当前房间为大厅')
+                
                 setCurrentRoom(lobbyRoom)
                 // 保存大厅到sessionStorage
                 sessionStorage.setItem('currentRoom', JSON.stringify(lobbyRoom))
-                console.log('保存大厅到sessionStorage')
+                
               }
             }
           })
@@ -1041,26 +1025,26 @@ function App() {
 
       // 监听用户移动事件
       newSocket.on('user_moved', (data) => {
-        console.log('收到user_moved事件:', data)
-        console.log('当前用户ID:', user?.id)
+        
+        
         // 只有当移动的是当前用户时，才更新界面
         if (data.userId === user?.id) {
           // 重新获取房间列表
           fetch(`${API_URL}/api/rooms`)
             .then(res => res.json())
             .then(updatedRooms => {
-              console.log('获取到的房间列表:', updatedRooms)
+              
               setRooms(updatedRooms)
               // 找到目标房间（大厅）
               const targetRoom = updatedRooms.find(room => room.id === data.toRoom)
-              console.log('找到的目标房间:', targetRoom)
+              
               if (targetRoom) {
-                console.log('当前用户被移动到:', targetRoom.name)
-                console.log('设置当前房间为目标房间')
+                
+                
                 setCurrentRoom(targetRoom)
                 // 保存到sessionStorage
                 sessionStorage.setItem('currentRoom', JSON.stringify(targetRoom))
-                console.log('保存目标房间到sessionStorage')
+                
               }
             })
             .catch(err => {
@@ -1071,19 +1055,19 @@ function App() {
 
       // 监听用户更新事件
       newSocket.on('user_updated', (data) => {
-        console.log('收到user_updated事件:', data)
+        
         fetchUsers()
       })
 
       // 监听用户删除事件
       newSocket.on('user_deleted', (data) => {
-        console.log('收到user_deleted事件:', data)
+        
         fetchUsers()
       })
 
-      // 监听用户状态更新事件
+      // 监听用户状态更新事�?
       newSocket.on('user_status_updated', (updatedUser) => {
-        console.log('收到user_status_updated事件:', updatedUser)
+        
         setUsers(prevUsers => prevUsers.map(user => 
           user.id === updatedUser.id ? { ...user, online: updatedUser.online } : user
         ))
@@ -1091,16 +1075,16 @@ function App() {
 
       // 监听用户离开消息
       newSocket.on('user_left', (data) => {
-        console.log('收到user_left事件:', data)
-        // 不再调用fetchRooms()，完全依赖roomUsersUpdated事件来更新状态
-        // 这样可以避免用旧的房间列表覆盖新的状态
+        
+        // 不再调用fetchRooms()，完全依赖roomUsersUpdated事件来更新状�?
+        // 这样可以避免用旧的房间列表覆盖新的状�?
       })
 
-      // 监听新消息
+      // 监听新消�?
       newSocket.on('new_message', (message) => {
-        console.log('收到新消息:', message)
+        
         setMessages(prev => [...prev, message])
-        // 自动滚动到底部
+        // 自动滚动到底�?
         setTimeout(() => {
           const chatMessages = document.querySelector('.chat-messages')
           if (chatMessages) {
@@ -1110,7 +1094,7 @@ function App() {
       })
 
       return () => {
-        // 不要主动关闭WebSocket连接，让浏览器自动处理
+        // 不要主动关闭WebSocket连接，让浏览器自动处�?
         // 这样服务器能正确检测到disconnect事件
       }
     }
@@ -1242,7 +1226,7 @@ function App() {
 
             <div className="rooms-grid">
               {rooms.map((room) => {
-                // 按房间状态计算颜色
+                // 按房间状态计算颜�?
                 let roomColor = statusColors.default;
                 if (room.isDefault) {
                   roomColor = statusColors.lobby;
@@ -1255,7 +1239,7 @@ function App() {
                 }
                 
                 // 打印房间成员信息
-                console.log('渲染房间卡片:', room.id, room.name, '状态:', room.status, '计时器:', room.timer, '成员:', room.users ? room.users.map(u => u.username) : [], '人数:', room.userCount || 0)
+                
                 
                 // 显示成员列表
                 const renderMembers = (users) => {
@@ -1274,7 +1258,7 @@ function App() {
                   return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
                 }
                 
-                // 获取房间计时（使用后端返回的数据）
+                // 获取房间计时（使用后端返回的数据�?
                 const roomTimer = room.timer || 0
                 const showTimer = !room.isDefault && (room.status === 'matching' || room.status === 'gaming')
                 
@@ -1329,13 +1313,13 @@ function App() {
           </div>
 
           {(() => {
-            console.log('[渲染条件] 检查 currentRoom:', currentRoom ? { id: currentRoom.id, name: currentRoom.name, isDefault: currentRoom.isDefault } : null)
-            console.log('[渲染条件] currentRoom 是否存在:', !!currentRoom)
+            
+            
             return null
           })()}
           {currentRoom && (
             (() => {
-              console.log('[渲染房间区域] 当前房间:', currentRoom.id, currentRoom.name, '是否为大厅:', currentRoom.isDefault)
+              
               return null
             })()
           )}
@@ -1344,39 +1328,39 @@ function App() {
               <div className="current-room-header">
                 <div>
                   <h2>当前房间: {currentRoom.name}</h2>
-                  {peerId && <div>我的 Peer ID: {peerId}</div>}
+
                 </div>
                 {(() => {
-                  console.log('[渲染按钮] 开始渲染语音按钮，currentRoom:', currentRoom ? { id: currentRoom.id, name: currentRoom.name, isDefault: currentRoom.isDefault } : null)
+                  
                   if (!currentRoom) {
-                    console.log('[渲染按钮] currentRoom 为 null，不渲染按钮')
+                    
                     return null
                   }
-                  console.log('[渲染按钮] 是否在子房间:', !currentRoom.isDefault, '当前房间:', currentRoom.id, currentRoom.name, '是否为大厅:', currentRoom.isDefault)
-                  console.log('[渲染按钮] 是否显示语音按钮:', !currentRoom.isDefault)
+                  
+                  
                   if (!currentRoom.isDefault) {
-                    console.log('[渲染按钮] 渲染语音按钮')
+                    
                     return (
                       <div className="voice-controls" ref={voiceControlsRef}>
                         <button className="btn-secondary" onClick={toggleMic}>{isMicOn ? '闭麦' : '开麦'}</button>
                         <button className="btn-secondary" onClick={toggleDeafen}>{isDeafen ? '开听' : '闭听'}</button>
-                        <button className="btn-secondary" onClick={testCall}>测试呼叫</button>
+
                       </div>
                     )
                   } else {
-                    console.log('[渲染按钮] 不渲染语音按钮（当前是大厅）')
+                    
                     return null
                   }
                 })()}
                 <button className="btn-secondary" onClick={leaveRoom}>离开房间</button>
               </div>
 
-              {/* 只有子房间才显示状态按钮，大厅不显示 */}
+              {/* 只有子房间才显示状态按钮，大厅不显示*/}
               {!currentRoom.isDefault && (
                 <div className="room-status-controls">
-                  <span>房间状态:</span>
+                  <span>房间状态</span>
                   <div className="status-buttons">
-                    {/* 找到当前用户在房间中的状态 */}
+                    {/* 找到当前用户在房间中的状态*/}
                     {(() => {
                       const currentUserInRoom = roomUsers.find(u => u.id === user.id);
                       const userStatus = currentUserInRoom ? currentUserInRoom.status : 'idle';
@@ -1464,7 +1448,7 @@ function App() {
               )}
             </div>
             <div className="members-list">
-              <h3>所有用户 ({users.length})</h3>
+              <h3>所有用户({users.length})</h3>
               <ul>
                 {users.map((u) => (
                   <li key={u.id} className={u.id === user.id ? 'me' : ''}>
