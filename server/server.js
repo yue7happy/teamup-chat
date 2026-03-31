@@ -74,31 +74,64 @@ function startRoomTimer(roomId) {
     clearInterval(roomTimers.get(roomId));
   }
   
-  // 初始化计时数�?
+  // 初始化计时数
   const room = data.rooms.find(r => r.id === roomId);
   if (room) {
     if (!room.timer) {
       room.timer = 0;
     }
     
-    // 每秒更新一次计�?
+    console.log(`计时器启动 房间ID: ${roomId} 状态: ${room.status}`);
+    
+    // 每秒更新一次计时
     const timer = setInterval(() => {
       const room = data.rooms.find(r => r.id === roomId);
       if (room) {
         room.timer++;
         
-        // 保存数据并广播更�?
+        // 保存数据并广播更新
         saveData(data);
         broadcastRooms();
         
-        // 检查是否需要自动切换状态（15分钟�?
-        if (room.timer >= 900) {
-          room.status = 'idle';
-          room.timer = 0;
-          clearInterval(roomTimers.get(roomId));
-          roomTimers.delete(roomId);
-          saveData(data);
-          broadcastRooms();
+        // 匹配中状态的处理
+        if (room.status === 'matching') {
+          // 每满1分钟，推送voiceReminder事件
+          if (room.timer % 60 === 0 && room.timer > 0) {
+            console.log(`推送 voiceReminder 房间ID: ${roomId} 已运行: ${room.timer}秒`);
+            io.to(roomId).emit('voiceReminder');
+          }
+          
+          // 累计满5分钟未变更状态，自动改为空闲
+          if (room.timer >= 300) {
+            console.log(`房间状态变化 房间ID: ${roomId} 旧状态: ${room.status} 新状态: idle`);
+            room.status = 'idle';
+            room.timer = 0;
+            clearInterval(roomTimers.get(roomId));
+            roomTimers.delete(roomId);
+            
+            // 将房间内所有成员踢回大厅
+            kickUsersToLobby(roomId);
+            
+            saveData(data);
+            broadcastRooms();
+          }
+        } 
+        // 游戏中状态的处理
+        else if (room.status === 'gaming') {
+          // 累计满15分钟未变更状态，自动改为空闲
+          if (room.timer >= 900) {
+            console.log(`房间状态变化 房间ID: ${roomId} 旧状态: ${room.status} 新状态: idle`);
+            room.status = 'idle';
+            room.timer = 0;
+            clearInterval(roomTimers.get(roomId));
+            roomTimers.delete(roomId);
+            
+            // 将房间内所有成员踢回大厅
+            kickUsersToLobby(roomId);
+            
+            saveData(data);
+            broadcastRooms();
+          }
         }
       }
     }, 1000);
@@ -107,7 +140,7 @@ function startRoomTimer(roomId) {
   }
 }
 
-// 停止房间计时�?
+// 停止房间计时器
 function stopRoomTimer(roomId) {
   if (roomTimers.has(roomId)) {
     clearInterval(roomTimers.get(roomId));
@@ -118,6 +151,50 @@ function stopRoomTimer(roomId) {
   if (room) {
     room.timer = 0;
   }
+}
+
+// 将房间内所有成员踢回大厅
+function kickUsersToLobby(roomId) {
+  const room = data.rooms.find(r => r.id === roomId);
+  if (!room || room.isDefault) return;
+  
+  const lobbyRoom = data.rooms.find(r => r.isDefault);
+  if (!lobbyRoom) return;
+  
+  const roomUsers = [...room.users]; // 保存房间内的用户
+  
+  // 将所有用户移到大
+  roomUsers.forEach(user => {
+    if (!user || !user.id) return;
+    
+    // 检查用户是否已经在大厅
+    const userInLobby = lobbyRoom.users.find(u => u.id === user.id);
+    if (!userInLobby) {
+      lobbyRoom.users.push(user);
+    }
+    
+    // 更新在线用户的当前房间
+    onlineUsers.forEach((onlineUser, socketId) => {
+      if (onlineUser.id === user.id) {
+        onlineUser.currentRoom = lobbyRoom.id;
+        // 广播用户移动消息
+        io.emit('user_moved', {
+          userId: user.id,
+          username: user.username,
+          fromRoom: roomId,
+          toRoom: lobbyRoom.id
+        });
+      }
+    });
+  });
+  
+  // 清空房间
+  room.users = [];
+  
+  // 广播大厅用户更新
+  io.to(lobbyRoom.id).emit('roomUsersUpdated', lobbyRoom.users);
+  // 广播原房间用户更新（为空）
+  io.to(roomId).emit('roomUsersUpdated', room.users);
 }
 
 // 初始化用户状�?
@@ -591,26 +668,26 @@ io.on('connection', (socket) => {
       return;
     }
     
-    
+    const oldStatus = room.status;
     room.status = status;
     
+    console.log(`房间状态变化 房间ID: ${roomId} 旧状态: ${oldStatus} 新状态: ${status}`);
     
-    
-    // 当任意用户点击状态按钮时，更新房间内所有在线用户的状�?
+    // 当任意用户点击状态按钮时，更新房间内所有在线用户的状态
     room.users.forEach(userInRoom => {
       userInRoom.status = status;
       
     });
     
-    // 管理房间计时�?
+    // 管理房间计时器
     if (!room.isDefault) {
       if (status === 'matching' || status === 'gaming') {
-        // 开始或重置计时�?
+        // 开始或重置计时器
         room.timer = 0;
         
         startRoomTimer(roomId);
       } else {
-        // 停止计时�?
+        // 停止计时器
         
         stopRoomTimer(roomId);
         room.timer = 0;

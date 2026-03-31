@@ -1119,6 +1119,15 @@ function App() {
         }, 100)
       })
 
+      // 监听语音提醒事件
+      newSocket.on('voiceReminder', () => {
+        console.log('收到 voiceReminder 事件')
+        const audio = new Audio('/reminder.mp3')
+        audio.play().catch(error => {
+          console.error('播放提醒音频失败:', error)
+        })
+      })
+
       return () => {
         if (newSocket) {
           newSocket.disconnect()
