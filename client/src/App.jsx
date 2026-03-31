@@ -587,7 +587,8 @@ function App() {
       try {
         const res = await fetch(`${API_URL}/api/rooms/${roomToDelete.id}`, {
           method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' }
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: user.id })
         })
         const data = await res.json()
         
@@ -622,7 +623,7 @@ function App() {
       const res = await fetch(`${API_URL}/api/users/${userId}/role`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ role: newRole })
+        body: JSON.stringify({ role: newRole, userId: user.id })
       })
       const data = await res.json()
       if (data.success) {
@@ -645,7 +646,8 @@ function App() {
       try {
         const res = await fetch(`${API_URL}/api/users/${userToDelete.id}`, {
           method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' }
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: user.id })
         })
         const data = await res.json()
         if (data.success) {
@@ -1323,15 +1325,17 @@ function App() {
             <div className="section-header">
             <h2>房间列表</h2>
             <div className="room-actions">
-              <form onSubmit={handleCreateRoom} className="create-room-form">
-                <input
-                  type="text"
-                  value={newRoomName}
-                  onChange={(e) => setNewRoomName(e.target.value)}
-                  placeholder="输入房间名称"
-                />
-                <button type="submit" className="btn-primary">创建房间</button>
-              </form>
+              {(user.role === 'owner' || user.role === 'admin') && (
+                <form onSubmit={handleCreateRoom} className="create-room-form">
+                  <input
+                    type="text"
+                    value={newRoomName}
+                    onChange={(e) => setNewRoomName(e.target.value)}
+                    placeholder="输入房间名称"
+                  />
+                  <button type="submit" className="btn-primary">创建房间</button>
+                </form>
+              )}
               {(user.role === 'owner' || user.role === 'admin') && (
                 <button 
                   className="btn-secondary"
@@ -1565,7 +1569,7 @@ function App() {
                 >
                   修改密码
                 </button>
-                {user.role === 'owner' && (
+                {(user.role === 'owner' || user.role === 'admin') && (
                   <button 
                     className="btn-primary add-user-btn"
                     onClick={() => setShowAddUser(true)}
@@ -1592,7 +1596,7 @@ function App() {
                           {u.role === 'owner' ? '房主' : '管理员'}
                         </span>
                       )}
-                      {user.role === 'owner' && u.role !== 'owner' && (
+                      {((user.role === 'owner' || user.role === 'admin') && u.role !== 'owner') && (
                         <div className="member-buttons">
                           <button 
                             className="btn-secondary small"

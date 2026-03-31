@@ -237,6 +237,17 @@ app.get('/api/rooms', (req, res) => {
 
 app.post('/api/rooms', (req, res) => {
   const { name, createdBy } = req.body;
+  
+  // 查找用户并检查权限
+  const user = data.users.find(u => u.id === createdBy);
+  if (!user) {
+    return res.json({ success: false, message: '用户不存在' });
+  }
+  
+  if (user.role !== 'owner' && user.role !== 'admin') {
+    return res.json({ success: false, message: '权限不足' });
+  }
+  
   const newRoom = {
     id: Date.now().toString(),
     name,
@@ -258,6 +269,16 @@ app.post('/api/rooms', (req, res) => {
 
 app.post('/api/users', (req, res) => {
   const { username, createdBy } = req.body;
+  
+  // 查找用户并检查权限
+  const user = data.users.find(u => u.id === createdBy);
+  if (!user) {
+    return res.json({ success: false, message: '用户不存在' });
+  }
+  
+  if (user.role !== 'owner' && user.role !== 'admin') {
+    return res.json({ success: false, message: '权限不足' });
+  }
   
   if (data.users.find(u => u.username === username)) {
     return res.json({ success: false, message: '用户名已存在' });
@@ -292,7 +313,17 @@ app.get('/api/users', (req, res) => {
 
 app.put('/api/users/:id/role', (req, res) => {
   const { id } = req.params;
-  const { role } = req.body;
+  const { role, userId } = req.body;
+  
+  // 查找用户并检查权限
+  const user = data.users.find(u => u.id === userId);
+  if (!user) {
+    return res.json({ success: false, message: '用户不存在' });
+  }
+  
+  if (user.role !== 'owner' && user.role !== 'admin') {
+    return res.json({ success: false, message: '权限不足' });
+  }
   
   // 不允许修改房主角�?
   if (id === '1') {
@@ -315,6 +346,17 @@ app.put('/api/users/:id/role', (req, res) => {
 
 app.delete('/api/users/:id', (req, res) => {
   const { id } = req.params;
+  const { userId } = req.body;
+  
+  // 查找用户并检查权限
+  const user = data.users.find(u => u.id === userId);
+  if (!user) {
+    return res.json({ success: false, message: '用户不存在' });
+  }
+  
+  if (user.role !== 'owner' && user.role !== 'admin') {
+    return res.json({ success: false, message: '权限不足' });
+  }
   
   // 不允许删除房�?
   if (id === '1') {
@@ -338,9 +380,18 @@ app.delete('/api/users/:id', (req, res) => {
 
 app.delete('/api/rooms/:id', (req, res) => {
   const { id } = req.params;
+  const { userId } = req.body;
   
   try {
+    // 查找用户并检查权限
+    const user = data.users.find(u => u.id === userId);
+    if (!user) {
+      return res.json({ success: false, message: '用户不存在' });
+    }
     
+    if (user.role !== 'owner' && user.role !== 'admin') {
+      return res.json({ success: false, message: '权限不足' });
+    }
     
     // 不允许删除默认大�?
     if (id === 'lobby') {
