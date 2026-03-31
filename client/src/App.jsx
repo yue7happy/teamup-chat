@@ -191,7 +191,20 @@ function App() {
     })
     
     return () => {
-      // 清理资源
+      Object.values(connections).forEach(call => call.close())
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach(track => track.stop())
+      }
+      Object.values(remoteAudios).forEach(audio => {
+        if (audio) {
+          audio.pause()
+          audio.srcObject = null
+        }
+      })
+      if (window.peer) {
+        window.peer.destroy()
+        window.peer = null
+      }
     }
   }, [])
 
@@ -1107,8 +1120,9 @@ function App() {
       })
 
       return () => {
-        // 不要主动关闭WebSocket连接，让浏览器自动处�?
-        // 这样服务器能正确检测到disconnect事件
+        if (newSocket) {
+          newSocket.disconnect()
+        }
       }
     }
   }, [user])
