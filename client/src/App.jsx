@@ -247,20 +247,20 @@ function App() {
     }
   }, [currentRoom])
 
-  // 恢复开麦状�?- 当用户进入房间后检查是否需要恢复开�?
+  // 恢复开麦状态- 当用户进入房间后检查是否需要恢复开麦
   useEffect(() => {
     const restoreMicState = async () => {
       // 检查是否已经恢复过
       if (hasRestoredMicRef.current) return
       
-      // 确保已经进入房间且不是大�?
+      // 确保已经进入房间且不是大厅
       if (!currentRoom || currentRoom.isDefault) return
       
-      // 确保已经�?peer 实例
+      // 确保已经有peer 实例
       const currentPeer = window.peer || peer
       if (!currentPeer) return
       
-      // 确保已经�?peerId
+      // 确保已经有peerId
       if (!peerId) return
       
       // 确保房间成员列表已经加载
@@ -269,14 +269,14 @@ function App() {
       // 标记已经尝试恢复
       hasRestoredMicRef.current = true
       
-      // 检查是否需要恢复闭听状�?
+      // 检查是否需要恢复闭听状态
       const savedDeafenState = sessionStorage.getItem('isDeafen')
       if (savedDeafenState === 'true') {
         setIsDeafen(true)
         
       }
       
-      // 检查是否需要恢复开麦状�?
+      // 检查是否需要恢复开麦状态
       const savedMicState = sessionStorage.getItem('isMicOn')
       if (savedMicState !== 'true') return
       
@@ -290,28 +290,16 @@ function App() {
         // 同时更新 ref
         localStreamRef.current = stream
         
-        // 遍历当前房间的所有其他成员，发起呼叫
-        const newConnections = {}
-        roomUsers.forEach(otherUser => {
-          if (otherUser.peerId && otherUser.peerId !== peerId) {
-            
-            try {
-              const call = currentPeer.call(otherUser.peerId, stream)
-              newConnections[otherUser.peerId] = call
-            } catch (error) {
-              console.error('恢复状态：发起呼叫时出�?', error)
-            }
-          }
-        })
-        setConnections(newConnections)
         setIsMicOn(true)
+        // 设置标志，表示需要向新成员发起呼叫
+        shouldCallNewMembersRef.current = true
         
         
       } catch (error) {
-        console.error('恢复开麦状态失�?', error)
-        // 恢复失败，清除保存的状�?
+        console.error('恢复开麦状态失败', error)
+        // 恢复失败，清除保存的状态
         sessionStorage.removeItem('isMicOn')
-        // 重置标记，允许下次尝�?
+        // 重置标记，允许下次尝试
         hasRestoredMicRef.current = false
       }
     }
@@ -468,7 +456,7 @@ function App() {
       setRemoteAudios({})
       // 重置开麦状�?
       setIsMicOn(false)
-      sessionStorage.removeItem('isMicOn')
+      // 保留开麦状态在 sessionStorage 中，以便切换房间后恢复
       // 重置恢复标记
       hasRestoredMicRef.current = false
       
