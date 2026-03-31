@@ -45,6 +45,9 @@ function App() {
   const [isDeafen, setIsDeafen] = useState(false)
   const [connections, setConnections] = useState({})
   const [remoteAudios, setRemoteAudios] = useState({})
+  const [showChangePassword, setShowChangePassword] = useState(false)
+  const [changePasswordForm, setChangePasswordForm] = useState({ oldPassword: '', newPassword: '', confirmPassword: '' })
+  const [changePasswordError, setChangePasswordError] = useState('')
   const hasRestoredMicRef = useRef(false)
   const localStreamRef = useRef(null)
   const voiceControlsRef = useRef(null)
@@ -665,6 +668,41 @@ function App() {
     setUserToDelete(null);
   }
 
+  const handleChangePassword = async (e) => {
+    e.preventDefault()
+    setChangePasswordError('')
+    
+    const { oldPassword, newPassword, confirmPassword } = changePasswordForm
+    
+    if (!oldPassword || !newPassword || !confirmPassword) {
+      setChangePasswordError('请填写所有字段')
+      return
+    }
+    
+    if (newPassword !== confirmPassword) {
+      setChangePasswordError('新密码和确认密码不一致')
+      return
+    }
+    
+    try {
+      const res = await fetch(`${API_URL}/api/user/change-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ oldPassword, newPassword, userId: user.id })
+      })
+      const data = await res.json()
+      
+      if (data.success) {
+        alert('密码已修改，请重新登录')
+        handleLogout()
+      } else {
+        setChangePasswordError(data.message || '修改密码失败')
+      }
+    } catch (err) {
+      setChangePasswordError('网络错误，请稍后重试')
+    }
+  }
+
   const handleLogout = () => {
     if (socket && currentRoom) {
       // 先发送离开房间请求
@@ -1234,6 +1272,51 @@ function App() {
         </div>
       )}
 
+      {showChangePassword && (
+        <div className="modal-overlay" onClick={() => setShowChangePassword(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h3>修改密码</h3>
+            <form onSubmit={handleChangePassword}>
+              <div className="form-group">
+                <label>旧密码</label>
+                <input
+                  type="password"
+                  value={changePasswordForm.oldPassword}
+                  onChange={(e) => setChangePasswordForm({ ...changePasswordForm, oldPassword: e.target.value })}
+                  placeholder="请输入旧密码"
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label>新密码</label>
+                <input
+                  type="password"
+                  value={changePasswordForm.newPassword}
+                  onChange={(e) => setChangePasswordForm({ ...changePasswordForm, newPassword: e.target.value })}
+                  placeholder="请输入新密码"
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label>确认新密码</label>
+                <input
+                  type="password"
+                  value={changePasswordForm.confirmPassword}
+                  onChange={(e) => setChangePasswordForm({ ...changePasswordForm, confirmPassword: e.target.value })}
+                  placeholder="请确认新密码"
+                  required
+                />
+              </div>
+              {changePasswordError && <div className="error">{changePasswordError}</div>}
+              <div className="modal-actions">
+                <button type="button" className="btn-secondary" onClick={() => setShowChangePassword(false)}>取消</button>
+                <button type="submit" className="btn-primary">修改密码</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       <main className="main-content">
         <div className="content-left">
           <div className="rooms-section">
@@ -1474,14 +1557,23 @@ function App() {
           <div className="members-section">
             <div className="members-header">
               <h2>成员管理</h2>
-              {user.role === 'owner' && (
+              <div className="header-buttons">
                 <button 
-                  className="btn-primary add-user-btn"
-                  onClick={() => setShowAddUser(true)}
+                  className="btn-secondary add-user-btn"
+                  style={{ marginRight: '8px' }}
+                  onClick={() => setShowChangePassword(true)}
                 >
-                  + 添加用户
+                  修改密码
                 </button>
-              )}
+                {user.role === 'owner' && (
+                  <button 
+                    className="btn-primary add-user-btn"
+                    onClick={() => setShowAddUser(true)}
+                  >
+                    + 添加用户
+                  </button>
+                )}
+              </div>
             </div>
             <div className="members-list">
               <h3>所有用户({users.length})</h3>

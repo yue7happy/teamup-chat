@@ -434,6 +434,33 @@ app.delete('/api/rooms/:id', (req, res) => {
   }
 });
 
+// 修改密码接口
+app.post('/api/user/change-password', (req, res) => {
+  const { oldPassword, newPassword, userId } = req.body;
+  
+  try {
+    // 查找用户
+    const user = data.users.find(u => u.id === userId);
+    if (!user) {
+      return res.json({ success: false, message: '用户不存在' });
+    }
+    
+    // 验证旧密码
+    if (user.password !== oldPassword) {
+      return res.json({ success: false, message: '旧密码错误' });
+    }
+    
+    // 更新密码
+    user.password = newPassword;
+    saveData(data);
+    
+    res.json({ success: true, message: '密码修改成功' });
+  } catch (error) {
+    console.error('修改密码时发生错误:', error);
+    res.json({ success: false, message: '修改密码失败' });
+  }
+});
+
 function broadcastRooms() {
   const roomsWithUserCount = data.rooms.map(room => ({
     ...room,
