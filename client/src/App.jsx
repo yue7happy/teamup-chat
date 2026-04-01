@@ -547,9 +547,6 @@ function App() {
     setRemoteAudios({})
     setIsMicOn(false)
     setIsDeafen(false)
-    // 清除开麦和闭听状�?
-    sessionStorage.removeItem('isMicOn')
-    sessionStorage.removeItem('isDeafen')
     // 重置恢复标记
     hasRestoredMicRef.current = false
     
