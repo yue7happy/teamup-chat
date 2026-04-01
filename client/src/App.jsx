@@ -165,7 +165,7 @@ function App() {
         .then(res => res.json())
         .then(data => {
           
-          setRooms(data)
+          setRooms(sortRooms(data))
           
           // 从后端数据中恢复房间状态，不使用本地缓存的房间状�?
           const storedRoom = sessionStorage.getItem('currentRoom')
@@ -364,7 +364,7 @@ function App() {
     try {
       const res = await fetch(`${API_URL}/api/rooms`)
       const data = await res.json()
-      setRooms(data)
+      setRooms(sortRooms(data))
     } catch (err) {
       console.error('获取房间列表失败:', err)
     }
@@ -404,6 +404,37 @@ function App() {
     } catch (err) {
       console.error('获取房间成员列表失败:', err)
     }
+  }
+
+  // 房间排序函数
+  const sortRooms = (roomsList) => {
+    // 分离大厅和非大厅房间
+    const lobbyRoom = roomsList.find(room => room.isDefault)
+    const nonLobbyRooms = roomsList.filter(room => !room.isDefault)
+    
+    // 状态优先级：matching > gaming > idle
+    const statusPriority = {
+      'matching': 3,
+      'gaming': 2,
+      'idle': 1
+    }
+    
+    // 对非大厅房间排序
+    nonLobbyRooms.sort((a, b) => {
+      // 首先按状态排序
+      const statusDiff = statusPriority[b.status] - statusPriority[a.status]
+      if (statusDiff !== 0) {
+        return statusDiff
+      }
+      // 状态相同时，按 timer 从大到小排序
+      return (b.timer || 0) - (a.timer || 0)
+    })
+    
+    // 大厅房间始终在最顶部
+    if (lobbyRoom) {
+      return [lobbyRoom, ...nonLobbyRooms]
+    }
+    return nonLobbyRooms
   }
 
   const handleLogin = async (e) => {
@@ -1037,7 +1068,7 @@ function App() {
           .then(res => res.json())
           .then(updatedRooms => {
             
-            setRooms(updatedRooms)
+            setRooms(sortRooms(updatedRooms))
             
             // 尝试从sessionStorage中恢复房间状态，但使用后端返回的最新数�?
             const savedRoom = sessionStorage.getItem('currentRoom')
@@ -1122,7 +1153,7 @@ function App() {
       })
 
       newSocket.on('roomsUpdated', (updatedRooms) => {
-        setRooms(updatedRooms)
+        setRooms(sortRooms(updatedRooms))
       })
 
       newSocket.on('roomUsersUpdated', (users) => {
@@ -1146,8 +1177,9 @@ function App() {
             .then(res => res.json())
             .then(updatedRooms => {
               
-              setRooms(updatedRooms)
-              const updatedRoom = updatedRooms.find(r => r.id === latestCurrentRoom.id)
+              setRooms(sortRooms(updatedRooms))
+              const sortedRooms = sortRooms(updatedRooms)
+              const updatedRoom = sortedRooms.find(r => r.id === latestCurrentRoom.id)
               if (updatedRoom) {
                 
                 
@@ -1176,11 +1208,12 @@ function App() {
         fetch(`${API_URL}/api/rooms`)
           .then(res => res.json())
           .then(updatedRooms => {
-            setRooms(updatedRooms)
+            setRooms(sortRooms(updatedRooms))
             // 只有当当前在被删除的房间中时，才切换到大�?
             if (currentRoom && currentRoom.id === data.roomId) {
               // 找到默认大厅房间
-              const lobbyRoom = updatedRooms.find(room => room.isDefault)
+              const sortedRooms = sortRooms(updatedRooms)
+              const lobbyRoom = sortedRooms.find(room => room.isDefault)
               
               if (lobbyRoom) {
                 
@@ -1209,9 +1242,10 @@ function App() {
             .then(res => res.json())
             .then(updatedRooms => {
               
-              setRooms(updatedRooms)
+              setRooms(sortRooms(updatedRooms))
               // 找到目标房间（大厅）
-              const targetRoom = updatedRooms.find(room => room.id === data.toRoom)
+              const sortedRooms = sortRooms(updatedRooms)
+              const targetRoom = sortedRooms.find(room => room.id === data.toRoom)
               
               if (targetRoom) {
                 
