@@ -167,28 +167,18 @@ function App() {
           
           setRooms(sortRooms(data))
           
-          // 从后端数据中恢复房间状态，不使用本地缓存的房间状�?
-          const storedRoom = sessionStorage.getItem('currentRoom')
-          if (storedRoom) {
-            try {
-              const parsedRoom = JSON.parse(storedRoom)
-              const updatedRoom = data.find(r => r.id === parsedRoom.id)
-              if (updatedRoom) {
-                // 确保 isDefault 属性存�?
-                const roomWithIsDefault = { ...updatedRoom, isDefault: updatedRoom.isDefault || false }
-                
-                setCurrentRoom(roomWithIsDefault)
-                sessionStorage.setItem('currentRoom', JSON.stringify(roomWithIsDefault))
-              } else {
-                // 房间不存在了，清空本地缓�?
-                sessionStorage.removeItem('currentRoom')
-                setCurrentRoom(null)
-              }
-            } catch (error) {
-              console.error('更新房间状态失�?', error)
-              sessionStorage.removeItem('currentRoom')
-              setCurrentRoom(null)
-            }
+          // 找到默认大厅房间，不使用本地缓存的房间状态
+          const lobbyRoom = data.find(room => room.isDefault)
+          if (lobbyRoom) {
+            // 确保 isDefault 属性存在
+            const roomWithIsDefault = { ...lobbyRoom, isDefault: lobbyRoom.isDefault || false }
+            
+            setCurrentRoom(roomWithIsDefault)
+            sessionStorage.setItem('currentRoom', JSON.stringify(roomWithIsDefault))
+          } else {
+            // 如果找不到大厅，清空本地缓存
+            sessionStorage.removeItem('currentRoom')
+            setCurrentRoom(null)
           }
         })
         .catch(err => {
@@ -1063,81 +1053,36 @@ function App() {
           newSocket.emit('update-peer-id', { userId: user.id, peerId: peerId })
         }
         
-        // 先获取最新的房间列表，然后恢复房间状�?
+        // 先获取最新的房间列表，然后进入默认大厅
         fetch(`${API_URL}/api/rooms`)
           .then(res => res.json())
           .then(updatedRooms => {
             
             setRooms(sortRooms(updatedRooms))
             
-            // 尝试从sessionStorage中恢复房间状态，但使用后端返回的最新数�?
-            const savedRoom = sessionStorage.getItem('currentRoom')
-            
-            
-            if (savedRoom) {
-              try {
-                const parsedRoom = JSON.parse(savedRoom)
+            // 直接进入默认大厅，不使用本地缓存的房间状态
+            const lobbyRoom = updatedRooms.find(room => room.isDefault)
+            if (lobbyRoom) {
+              // 延迟进入房间，确保 peerId 已经获取
+              const enterRoomWithDelay = () => {
+                const currentPeerId = window.currentPeerId || peerId
                 
-                
-                // 检查房间是否仍然存在，使用后端返回的最新数�?
-                const roomExists = updatedRooms.find(r => r.id === parsedRoom.id)
-                if (roomExists) {
-                  // 确保 isDefault 属性存�?
-                  const roomWithIsDefault = { ...roomExists, isDefault: roomExists.isDefault || false }
+                if (currentPeerId) {
+                  const userWithPeerId = { ...user, peerId: currentPeerId }
                   
-                  // 更新 currentRoom 为最新的房间信息
-                  setCurrentRoom(roomWithIsDefault)
-                  sessionStorage.setItem('currentRoom', JSON.stringify(roomWithIsDefault))
-                  
-                  
-                  // 延迟进入房间，确�?peerId 已经获取
-                  const enterRoomWithDelay = () => {
-                    const currentPeerId = window.currentPeerId || peerId
-                    
-                    if (currentPeerId) {
-                      const userWithPeerId = { ...user, peerId: currentPeerId }
-                      
-                      newSocket.emit('enterRoom', { roomId: roomWithIsDefault.id, user: userWithPeerId })
-                      // 同时发�?update-peer-id 确保 peerId 已更�?
-                      newSocket.emit('update-peer-id', { userId: user.id, peerId: currentPeerId })
-                    } else {
-                      // 如果还没�?peerId，延迟重�?
-                      
-                      setTimeout(enterRoomWithDelay, 500)
-                      return
-                    }
-                  }
-                  enterRoomWithDelay()
+                  newSocket.emit('enterRoom', { roomId: lobbyRoom.id, user: userWithPeerId })
+                  // 同时发送 update-peer-id 确保 peerId 已更新
+                  newSocket.emit('update-peer-id', { userId: user.id, peerId: currentPeerId })
                 } else {
-                  // 房间不存在了，进入大�?
-                  const lobbyRoom = updatedRooms.find(room => room.isDefault)
-                  if (lobbyRoom) {
-                    newSocket.emit('enterRoom', { roomId: lobbyRoom.id, user })
-                    setCurrentRoom(lobbyRoom)
-                    sessionStorage.setItem('currentRoom', JSON.stringify(lobbyRoom))
-                  }
-                }
-              } catch (error) {
-                console.error('恢复房间状态失�?', error)
-                sessionStorage.removeItem('currentRoom')
-                
-                // 进入默认大厅
-                const lobbyRoom = updatedRooms.find(room => room.isDefault)
-                if (lobbyRoom) {
-                  newSocket.emit('enterRoom', { roomId: lobbyRoom.id, user })
-                  setCurrentRoom(lobbyRoom)
-                  sessionStorage.setItem('currentRoom', JSON.stringify(lobbyRoom))
+                  // 如果还没有 peerId，延迟重试
+                  setTimeout(enterRoomWithDelay, 500)
+                  return
                 }
               }
-            } else {
-              // 没有保存的房间状态，进入默认大厅
-              const lobbyRoom = updatedRooms.find(room => room.isDefault)
-              if (lobbyRoom) {
-                
-                newSocket.emit('enterRoom', { roomId: lobbyRoom.id, user })
-                setCurrentRoom(lobbyRoom)
-                sessionStorage.setItem('currentRoom', JSON.stringify(lobbyRoom))
-              }
+              enterRoomWithDelay()
+              
+              setCurrentRoom(lobbyRoom)
+              sessionStorage.setItem('currentRoom', JSON.stringify(lobbyRoom))
             }
           })
           .catch(err => {
