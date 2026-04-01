@@ -1309,9 +1309,7 @@ function App() {
             {error && <div className="error">{error}</div>}
             <button type="submit" className="btn-primary">登录</button>
           </form>
-          <div className="login-hint">
-            <p>房主账号: 紫罗兰 / 152720</p>
-          </div>
+
         </div>
       </div>
     )
