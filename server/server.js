@@ -235,6 +235,77 @@ app.get('/api/rooms', (req, res) => {
   res.json(roomsWithUserCount);
 });
 
+app.get('/api/rooms/:id/users', (req, res) => {
+  const { id } = req.params;
+  const room = data.rooms.find(room => room.id === id);
+  
+  if (!room) {
+    return res.json({ success: false, message: '房间不存在' });
+  }
+  
+  res.json(room.users);
+});
+
+app.post('/api/rooms/:id/kick', (req, res) => {
+  const { id } = req.params;
+  const { userId, kickedBy } = req.body;
+  
+  // 查找房间
+  const room = data.rooms.find(room => room.id === id);
+  if (!room) {
+    return res.json({ success: false, message: '房间不存在' });
+  }
+  
+  // 查找操作用户并检查权限
+  const operator = data.users.find(u => u.id === kickedBy);
+  if (!operator) {
+    return res.json({ success: false, message: '操作用户不存在' });
+  }
+  
+  if (operator.role !== 'owner' && operator.role !== 'admin') {
+    return res.json({ success: false, message: '权限不足' });
+  }
+  
+  // 查找被踢用户
+  const userToKick = data.users.find(u => u.id === userId);
+  if (!userToKick) {
+    return res.json({ success: false, message: '被踢用户不存在' });
+  }
+  
+  // 不允许踢房主
+  if (userToKick.role === 'owner') {
+    return res.json({ success: false, message: '无法踢出房主' });
+  }
+  
+  // 从房间中移除用户
+  room.users = room.users.filter(u => u.id !== userId);
+  saveData(data);
+  
+  // 找到被踢用户的 socket 并通知
+  let kickedSocketId = null;
+  onlineUsers.forEach((onlineUser, socketId) => {
+    if (onlineUser.id === userId) {
+      kickedSocketId = socketId;
+    }
+  });
+  
+  if (kickedSocketId) {
+    io.to(kickedSocketId).emit('kicked', {
+      message: '你被踢出房间',
+      roomId: room.id,
+      roomName: room.name
+    });
+  }
+  
+  // 广播房间成员更新
+  io.to(room.id).emit('roomUsersUpdated', room.users);
+  
+  // 广播房间列表更新
+  broadcastRooms();
+  
+  res.json({ success: true, message: '用户已成功踢出' });
+});
+
 app.post('/api/rooms', (req, res) => {
   const { name, createdBy } = req.body;
   
@@ -280,7 +351,12 @@ app.post('/api/users', (req, res) => {
     return res.json({ success: false, message: '权限不足' });
   }
   
-  if (data.users.find(u => u.username === username)) {
+  // 检查用户名是否已存在
+  const existingUser = data.users.find(u => u.username === username);
+  console.log('添加用户 - 用户名:', username, '已存在用户:', existingUser ? existingUser.username : '无');
+  console.log('当前用户列表:', data.users.map(u => u.username));
+  
+  if (existingUser) {
     return res.json({ success: false, message: '用户名已存在' });
   }
   
@@ -321,7 +397,7 @@ app.put('/api/users/:id/role', (req, res) => {
     return res.json({ success: false, message: '用户不存在' });
   }
   
-  if (user.role !== 'owner' && user.role !== 'admin') {
+  if (user.role !== 'owner') {
     return res.json({ success: false, message: '权限不足' });
   }
   
@@ -369,11 +445,13 @@ app.delete('/api/users/:id', (req, res) => {
   }
   
   const deletedUser = data.users[userIndex];
+  console.log('删除用户 - 用户名:', deletedUser.username, 'ID:', deletedUser.id);
   data.users.splice(userIndex, 1);
   saveData(data);
+  console.log('删除后用户列表:', data.users.map(u => u.username));
   
   // 广播用户删除消息
-  io.emit('user_deleted', { success: true, userId: id });
+  io.emit('user_deleted', { success: true, userId: id, username: deletedUser.username });
   
   res.json({ success: true, message: '用户删除成功' });
 });
@@ -814,6 +892,28 @@ io.on('connection', (socket) => {
     broadcastRooms();
   });
 
+  socket.on('syncStart', ({ roomId }) => {
+    // 向当前房间的所有成员广播同步开始事件
+    if (roomId) {
+      io.to(roomId).emit('syncStart');
+    } else {
+      // 如果没有指定房间，向所有连接的用户广播
+      io.emit('syncStart');
+    }
+  });
+
+  socket.on('syncEnd', ({ roomId }) => {
+    // 向当前房间的所有成员广播同步结束事件
+    console.log('收到 syncEnd 事件');
+    console.log('syncEnd 广播');
+    if (roomId) {
+      io.to(roomId).emit('syncEnd');
+    } else {
+      // 如果没有指定房间，向所有连接的用户广播
+      io.emit('syncEnd');
+    }
+  });
+
   socket.on('disconnect', () => {
     
     const user = onlineUsers.get(socket.id);
@@ -945,5 +1045,5 @@ io.on('connection', (socket) => {
 
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
-  
+  console.log("Server running on port " + PORT);
 });

@@ -133,10 +133,42 @@ body {
   border-bottom: 1px solid #e0e0e0;
 }
 
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
 .app-header h1 {
   font-size: 24px;
   color: #333;
   font-weight: 600;
+  margin: 0;
+}
+
+.btn-sync {
+  padding: 8px 16px;
+  background: #1a73e8;
+  color: white;
+  border: none;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.btn-sync:hover {
+  background: #1557b0;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(26, 115, 232, 0.3);
+}
+
+.btn-sync:disabled {
+  background: #9aa0a6;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
 }
 
 .user-info {
@@ -443,11 +475,53 @@ body {
   transform: scale(1.05);
 }
 
-.room-users-list h3 {
+.room-users-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   margin-bottom: 20px;
+}
+
+.room-users-list h3 {
+  margin-bottom: 0;
   color: #333;
   font-weight: 600;
   font-size: 16px;
+}
+
+.btn-kick {
+  padding: 6px 12px;
+  background: #1a73e8;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.btn-kick:hover {
+  background: #1557b0;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(26, 115, 232, 0.3);
+}
+
+.kick-user-select {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  font-size: 14px;
+  background-color: #f8f9fa;
+  cursor: pointer;
+}
+
+.kick-user-select:focus {
+  outline: none;
+  border-color: #1a73e8;
+  box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.1);
+  background-color: white;
 }
 
 .room-users-list ul {

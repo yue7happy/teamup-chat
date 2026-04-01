@@ -48,6 +48,9 @@ function App() {
   const [showChangePassword, setShowChangePassword] = useState(false)
   const [changePasswordForm, setChangePasswordForm] = useState({ oldPassword: '', newPassword: '', confirmPassword: '' })
   const [changePasswordError, setChangePasswordError] = useState('')
+  const [syncButtonDisabled, setSyncButtonDisabled] = useState(false)
+  const [showKickUser, setShowKickUser] = useState(false)
+  const [userToKick, setUserToKick] = useState(null)
   const hasRestoredMicRef = useRef(false)
   const localStreamRef = useRef(null)
   const voiceControlsRef = useRef(null)
@@ -55,8 +58,10 @@ function App() {
   const currentRoomRef = useRef(null)
   // 使用 ref 来存储是否需要向新成员发起呼叫
   const shouldCallNewMembersRef = useRef(false)
-  // 使用 ref 来存储最新的 isMicOn 状态，避免闭包问�?
+  // 使用 ref 来存储最新的 isMicOn 状态，避免闭包问题
   const isMicOnRef = useRef(false)
+  // 使用 ref 来标记是否正在同步
+  const shouldSyncRef = useRef(false)
 
   useEffect(() => {
     const checkMobile = () => {
@@ -326,7 +331,7 @@ function App() {
 
   // 当房间成员变化时，如果有新成员加入且当前正在开麦，向新成员发起呼叫
   useEffect(() => {
-    // 只有在开麦状态下才处�?
+    // 只有在开麦状态下才处理
     if (!isMicOn || !localStreamRef.current) return
     
     const currentPeer = window.peer || peer
@@ -341,6 +346,7 @@ function App() {
           if (!connections[otherUser.peerId]) {
             
             try {
+
               const call = currentPeer.call(otherUser.peerId, localStreamRef.current)
               setConnections(prev => ({ ...prev, [otherUser.peerId]: call }))
             } catch (error) {
@@ -364,15 +370,39 @@ function App() {
     }
   }
 
-  const fetchUsers = async () => {
-    
+  const fetchUsers = async (updateCurrentUser = true) => {
     try {
       const res = await fetch(`${API_URL}/api/users`)
       const data = await res.json()
       
       setUsers(data)
+      
+      // 更新当前登录用户的信息，特别是角色信息
+      if (user && updateCurrentUser) {
+        const currentUserInfo = data.find(u => u.id === user.id)
+        if (currentUserInfo) {
+          const updatedUser = {
+            ...user,
+            role: currentUserInfo.role,
+            online: currentUserInfo.online
+          }
+          setUser(updatedUser)
+          // 同时更新sessionStorage中的用户信息
+          sessionStorage.setItem('user', JSON.stringify(updatedUser))
+        }
+      }
     } catch (err) {
       console.error('获取用户列表失败:', err)
+    }
+  }
+
+  const fetchRoomUsers = async (roomId) => {
+    try {
+      const res = await fetch(`${API_URL}/api/rooms/${roomId}/users`)
+      const data = await res.json()
+      setRoomUsers(data)
+    } catch (err) {
+      console.error('获取房间成员列表失败:', err)
     }
   }
 
@@ -733,6 +763,87 @@ function App() {
     setConnections({})
     setIsMicOn(false)
     hasRestoredMicRef.current = false
+    // 跳转到登录页面
+    window.location.href = '/'
+  }
+
+  const handleSync = async () => {
+    // 禁用同步按钮，添加防抖
+    setSyncButtonDisabled(true)
+    
+    try {
+      // 检查并确保 socket 连接
+      if (socket) {
+        // 如果 socket 断开，尝试重连
+        if (!socket.connected) {
+          // 手动连接
+          socket.connect()
+          
+          // 等待连接成功，最多等待 3 秒
+          let reconnectAttempts = 0
+          while (!socket.connected && reconnectAttempts < 30) {
+            await new Promise(resolve => setTimeout(resolve, 100))
+            reconnectAttempts++
+          }
+        }
+        
+        // 发送同步开始事件
+        if (socket.connected) {
+          socket.emit('syncStart', { roomId: currentRoom?.id })
+        }
+      }
+      
+      // 重新拉取房间列表
+      await fetchRooms()
+      
+      // 重新拉取用户列表（不更新当前用户状态，避免触发 socket 重建）
+      await fetchUsers(false)
+      
+      // 重新拉取当前房间的成员列表
+      if (currentRoom) {
+        await fetchRoomUsers(currentRoom.id)
+      }
+    } catch (err) {
+      console.error('同步数据失败:', err)
+    } finally {
+      // 发送同步结束事件
+      if (socket && socket.connected) {
+        socket.emit('syncEnd', { roomId: currentRoom?.id })
+      }
+      // 3秒后重新启用同步按钮
+      setTimeout(() => {
+        setSyncButtonDisabled(false)
+      }, 3000)
+    }
+  }
+
+  const confirmKickUser = async () => {
+    if (!userToKick || !currentRoom) return
+    
+    try {
+      const res = await fetch(`${API_URL}/api/rooms/${currentRoom.id}/kick`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: userToKick, kickedBy: user.id })
+      })
+      const data = await res.json()
+      
+      if (data.success) {
+        alert('用户已成功踢出')
+        // 刷新房间成员列表
+        if (currentRoom) {
+          await fetchRoomUsers(currentRoom.id)
+        }
+      } else {
+        alert(data.message || '踢出用户失败')
+      }
+    } catch (err) {
+      console.error('踢出用户失败:', err)
+      alert('网络错误，请稍后重试')
+    } finally {
+      setShowKickUser(false)
+      setUserToKick(null)
+    }
   }
 
   const sendMessage = useCallback(() => {
@@ -873,10 +984,6 @@ function App() {
     const currentPeer = window.peer || peer
     if (!currentPeer || !currentRoom || currentRoom.isDefault) return
     
-    
-    
-    
-    
     // 从当前房间成员列表中获取另一个用户的 peerId
     const otherUser = roomUsers.find(user => user.peerId && user.peerId !== peerId)
     if (otherUser) {
@@ -899,9 +1006,16 @@ function App() {
       // 保存用户信息到sessionStorage
       sessionStorage.setItem('user', JSON.stringify(user))
       
+      // 关闭旧的 socket 连接
+      if (socket) {
+        socket.close()
+      }
+      
       const newSocket = io(API_URL, {
         transports: ['websocket'],
-        reconnection: false
+        reconnection: true,
+        reconnectionAttempts: 5,
+        reconnectionDelay: 1000
       })
       
       setSocket(newSocket)
@@ -1008,7 +1122,6 @@ function App() {
       })
 
       newSocket.on('disconnect', (reason) => {
-        
       })
 
       newSocket.on('roomsUpdated', (updatedRooms) => {
@@ -1016,15 +1129,14 @@ function App() {
       })
 
       newSocket.on('roomUsersUpdated', (users) => {
-        
         const latestCurrentRoom = currentRoomRef.current
         if (latestCurrentRoom) {
           
         }
         setRoomUsers(users)
         
-        // 如果用户正在开麦且需要向新成员发起呼叫
-        if (isMicOnRef.current && localStreamRef.current && shouldCallNewMembersRef.current) {
+        // 如果用户正在开麦且需要向新成员发起呼叫，并且不在同步状态
+        if (isMicOnRef.current && localStreamRef.current && shouldCallNewMembersRef.current && !shouldSyncRef.current) {
           initiateCalls(localStreamRef.current, users)
         }
         
@@ -1161,16 +1273,32 @@ function App() {
 
       // 监听语音提醒事件
       newSocket.on('voiceReminder', () => {
-        console.log('收到 voiceReminder 事件')
         const audio = new Audio('/reminder.mp3')
         audio.play().catch(error => {
           console.error('播放提醒音频失败:', error)
         })
       })
 
+      // 监听被踢出事件
+      newSocket.on('kicked', (data) => {
+        alert(data.message)
+        // 跳回登录页面
+        handleLogout()
+      })
+
+      // 监听同步开始事件
+      newSocket.on('syncStart', () => {
+        shouldSyncRef.current = true
+      })
+
+      // 监听同步结束事件
+      newSocket.on('syncEnd', (data) => {
+        shouldSyncRef.current = false
+      })
+
       return () => {
         if (newSocket) {
-          newSocket.disconnect()
+          newSocket.close()
         }
       }
     }
@@ -1216,7 +1344,16 @@ function App() {
   return (
     <div className="app-container">
       <header className="app-header">
-        <h1>聊天室</h1>
+        <div className="header-left">
+          <h1>聊天室</h1>
+          <button 
+            className="btn-sync" 
+            onClick={handleSync} 
+            disabled={syncButtonDisabled}
+          >
+            同步
+          </button>
+        </div>
         <div className="user-info">
           <span>欢迎, {user.username} {user.role === 'owner' && '(房主)'}</span>
           <button className="btn-secondary" onClick={handleLogout}>退出</button>
@@ -1315,6 +1452,40 @@ function App() {
                 <button type="submit" className="btn-primary">修改密码</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {showKickUser && (
+        <div className="modal-overlay" onClick={() => setShowKickUser(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h3>踢出用户</h3>
+            <div className="form-group">
+              <label>选择要踢出的用户</label>
+              <select 
+                value={userToKick || ''}
+                onChange={(e) => setUserToKick(e.target.value)}
+                className="kick-user-select"
+              >
+                <option value="">请选择用户</option>
+                {roomUsers.filter(u => u.id !== user.id && u.role !== 'owner').map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.username}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="modal-actions">
+              <button type="button" className="btn-secondary" onClick={() => setShowKickUser(false)}>取消</button>
+              <button 
+                type="button" 
+                className="btn-primary" 
+                onClick={confirmKickUser}
+                disabled={!userToKick}
+              >
+                确认踢出
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -1518,7 +1689,17 @@ function App() {
               )}
 
               <div className="room-users-list">
-                <h3>在线用户 ({roomUsers.length})</h3>
+                <div className="room-users-header">
+                  <h3>在线用户 ({roomUsers.length})</h3>
+                  {(user.role === 'owner' || user.role === 'admin') && (
+                    <button 
+                      className="btn-kick"
+                      onClick={() => setShowKickUser(true)}
+                    >
+                      踢出
+                    </button>
+                  )}
+                </div>
                 <ul>
                   {roomUsers.map((u) => (
                     <li key={u.id} className={u.id === user.id ? 'me' : ''}>
@@ -1596,7 +1777,7 @@ function App() {
                           {u.role === 'owner' ? '房主' : '管理员'}
                         </span>
                       )}
-                      {((user.role === 'owner' || user.role === 'admin') && u.role !== 'owner') && (
+                      {user.role === 'owner' && u.role !== 'owner' && (
                         <div className="member-buttons">
                           <button 
                             className="btn-secondary small"
@@ -1604,6 +1785,16 @@ function App() {
                           >
                             {u.role === 'admin' ? '取消管理员' : '设为管理员'}
                           </button>
+                          <button 
+                            className="btn-secondary small danger"
+                            onClick={() => handleDeleteUser(u.id, u.username)}
+                          >
+                            删除
+                          </button>
+                        </div>
+                      )}
+                      {user.role === 'admin' && u.role !== 'owner' && (
+                        <div className="member-buttons">
                           <button 
                             className="btn-secondary small danger"
                             onClick={() => handleDeleteUser(u.id, u.username)}
