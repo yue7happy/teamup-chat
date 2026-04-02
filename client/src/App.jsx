@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import io from 'socket.io-client'
 import './App.css'
 
-const API_URL = 'https://teamup-api.yue7happy.workers.dev/api'
+const API_URL = '/api';
 
 const statusColors = {
   matching: '#ea4335',
@@ -54,7 +54,7 @@ function App() {
   const hasRestoredMicRef = useRef(false)
   const localStreamRef = useRef(null)
   const voiceControlsRef = useRef(null)
-  // 使用 ref 来存储最新的 currentRoom，避免闭包问�?
+  // 使用 ref 来存储最新的 currentRoom，避免闭包问 ?
   const currentRoomRef = useRef(null)
   // 使用 ref 来存储是否需要向新成员发起呼叫
   const shouldCallNewMembersRef = useRef(false)
@@ -78,11 +78,11 @@ function App() {
   // 初始化时间戳
   const startTime = performance.now()
 
-  // 立即从sessionStorage读取状�?
+  // 立即从sessionStorage读取状 ?
   useEffect(() => {
     
     
-    // 立即从sessionStorage读取上次的用户和开麦状�?
+    // 立即从sessionStorage读取上次的用户和开麦状 ?
     const storedUser = sessionStorage.getItem('user')
     const storedMicState = sessionStorage.getItem('isMicOn')
     
@@ -146,7 +146,7 @@ function App() {
       }
     }
     
-    // 并行获取用户列表和房间列�?
+    // 并行获取用户列表和房间列 ?
     Promise.all([
       // 获取用户列表
       fetch(`${API_URL}/api/users`)
@@ -206,13 +206,13 @@ function App() {
     }
   }, [])
 
-  // 同步 currentRoom �?ref
+  // 同步 currentRoom  ?ref
   useEffect(() => {
     currentRoomRef.current = currentRoom
     
   }, [currentRoom])
 
-  // 同步 isMicOn �?ref
+  // 同步 isMicOn  ?ref
   useEffect(() => {
     isMicOnRef.current = isMicOn
   }, [isMicOn])
@@ -233,7 +233,7 @@ function App() {
     
     if (currentRoom && !currentRoom.isDefault) {
       
-      // 延迟检查，确保DOM已更�?
+      // 延迟检查，确保DOM已更 ?
       const checkIntervals = [100, 300, 500, 1000, 2000]
       checkIntervals.forEach((delay, index) => {
         setTimeout(() => {
@@ -327,9 +327,9 @@ function App() {
     const currentPeer = window.peer || peer
     if (!currentPeer || !peerId) return
     
-    // 延迟执行，确保新成员已经准备好接收呼�?
+    // 延迟执行，确保新成员已经准备好接收呼 ?
     const timer = setTimeout(() => {
-      // 检查是否有新成员需要呼�?
+      // 检查是否有新成员需要呼 ?
       roomUsers.forEach(otherUser => {
         if (otherUser.peerId && otherUser.peerId !== peerId && otherUser.peerId.trim() !== '') {
           // 检查是否已经呼叫过
@@ -340,7 +340,7 @@ function App() {
               const call = currentPeer.call(otherUser.peerId, localStreamRef.current)
               setConnections(prev => ({ ...prev, [otherUser.peerId]: call }))
             } catch (error) {
-              console.error('向新成员发起呼叫时出�?', error)
+              console.error('向新成员发起呼叫时出 ?', error)
             }
           }
         }
@@ -510,10 +510,10 @@ function App() {
         localStream.getTracks().forEach(track => track.stop())
         setLocalStream(null)
       }
-      // 关闭所�?WebRTC 连接
+      // 关闭所 ?WebRTC 连接
       Object.values(connections).forEach(call => call.close())
       setConnections({})
-      // 停止所有远程音�?
+      // 停止所有远程音 ?
       Object.values(remoteAudios).forEach(audio => {
         if (audio) {
           audio.pause()
@@ -521,7 +521,7 @@ function App() {
         }
       })
       setRemoteAudios({})
-      // 重置开麦状�?
+      // 重置开麦状 ?
       setIsMicOn(false)
       // 保留开麦状态在 sessionStorage 中，以便切换房间后恢复
       // 重置恢复标记
@@ -530,12 +530,12 @@ function App() {
       socket.emit('leaveRoom', { roomId: currentRoom.id, user })
     }
     
-    // 发�?enterRoom 事件时包�?peerId
+    // 发 ?enterRoom 事件时包 ?peerId
     const userWithPeerId = { ...user, peerId: peerId }
     
     socket.emit('enterRoom', { roomId: room.id, user: userWithPeerId })
     setCurrentRoom(room)
-    // 清空消息列表，只显示当前房间的消�?
+    // 清空消息列表，只显示当前房间的消 ?
     setMessages([])
     // 保存当前房间到sessionStorage
     sessionStorage.setItem('currentRoom', JSON.stringify(room))
@@ -555,10 +555,10 @@ function App() {
       localStream.getTracks().forEach(track => track.stop())
       setLocalStream(null)
     }
-    // 关闭所有连�?
+    // 关闭所有连 ?
     Object.values(connections).forEach(call => call.close())
     setConnections({})
-    // 停止所有远程音�?
+    // 停止所有远程音 ?
     Object.values(remoteAudios).forEach(audio => {
       if (audio) {
         audio.pause()
@@ -574,7 +574,7 @@ function App() {
     // 找到大厅房间
     const lobbyRoom = rooms.find(room => room.isDefault)
     if (lobbyRoom) {
-      // 直接进入大厅，不调用 enterRoom 避免状态不一�?
+      // 直接进入大厅，不调用 enterRoom 避免状态不一 ?
       
       socket.emit('enterRoom', { roomId: lobbyRoom.id, user: userWithPeerId })
       setCurrentRoom(lobbyRoom)
@@ -582,7 +582,7 @@ function App() {
       setMessages([])
       sessionStorage.setItem('currentRoom', JSON.stringify(lobbyRoom))
     } else {
-      // 如果找不到大厅，清除房间状�?
+      // 如果找不到大厅，清除房间状 ?
       setCurrentRoom(null)
       setRoomUsers([])
       setMessages([])
@@ -599,7 +599,7 @@ function App() {
     
     
     
-    // 立即更新本地状态，让按钮颜色立即变�?
+    // 立即更新本地状态，让按钮颜色立即变 ?
     const updatedRoom = { ...currentRoom, status }
     setCurrentRoom(updatedRoom)
     // 保存到sessionStorage
@@ -645,14 +645,14 @@ function App() {
         }
         setShowDeleteConfirm(false);
         setRoomToDelete(null);
-        // 重置删除模式，使按钮变回「删除房间�?
+        // 重置删除模式，使按钮变回「删除房间 ?
         setShowDeleteRoom(false);
       } catch (err) {
         console.error('删除房间失败:', err);
         alert('网络错误，请稍后重试');
         setShowDeleteConfirm(false);
         setRoomToDelete(null);
-        // 重置删除模式，使按钮变回「删除房间�?
+        // 重置删除模式，使按钮变回「删除房间 ?
         setShowDeleteRoom(false);
       }
     }
@@ -662,7 +662,7 @@ function App() {
     
     setShowDeleteConfirm(false);
     setRoomToDelete(null);
-    // 重置删除模式，使按钮变回「删除房间�?
+    // 重置删除模式，使按钮变回「删除房间 ?
     setShowDeleteRoom(false);
   }
 
@@ -761,13 +761,13 @@ function App() {
     if (socket) {
       socket.close()
     }
-    // 如果正在开麦，关闭麦克�?
+    // 如果正在开麦，关闭麦克 ?
     if (localStream) {
       localStream.getTracks().forEach(track => track.stop())
     }
-    // 关闭所有连�?
+    // 关闭所有连 ?
     Object.values(connections).forEach(call => call.close())
-    // 清除sessionStorage中的用户信息和房间信�?
+    // 清除sessionStorage中的用户信息和房间信 ?
     sessionStorage.removeItem('user')
     sessionStorage.removeItem('currentRoom')
     sessionStorage.removeItem('isMicOn')
@@ -878,7 +878,7 @@ function App() {
     socket.emit('send_message', message)
     setMessageInput('')
     
-    // 自动滚动到底�?
+    // 自动滚动到底 ?
     setTimeout(() => {
       const chatMessages = document.querySelector('.chat-messages')
       if (chatMessages) {
@@ -899,7 +899,7 @@ function App() {
           const call = currentPeer.call(otherUser.peerId, stream)
           newConnections[otherUser.peerId] = call
         } catch (error) {
-          console.error('发起呼叫时出�?', error)
+          console.error('发起呼叫时出 ?', error)
         }
       }
     })
@@ -907,7 +907,7 @@ function App() {
     setConnections(prev => ({ ...prev, ...newConnections }))
   }, [peer, peerId])
 
-  // 开�?闭麦功能
+  // 开 ?闭麦功能
   const toggleMic = async () => {
     const currentPeer = window.peer || peer
     if (!currentPeer || !currentRoom || currentRoom.isDefault) return
@@ -930,7 +930,7 @@ function App() {
               const call = currentPeer.call(otherUser.peerId, stream)
               newConnections[otherUser.peerId] = call
             } catch (error) {
-              console.error('发起呼叫时出�?', error)
+              console.error('发起呼叫时出 ?', error)
             }
           }
         })
@@ -942,7 +942,7 @@ function App() {
         shouldCallNewMembersRef.current = true
         
       } catch (error) {
-        console.error('获取麦克风权限失�?', error)
+        console.error('获取麦克风权限失 ?', error)
         alert('无法获取麦克风权限，请检查浏览器设置')
       }
     } else {
@@ -968,12 +968,12 @@ function App() {
     }
   }
 
-  // 闭听/开听功�?
+  // 闭听/开听功 ?
   const toggleDeafen = () => {
     if (!currentRoom || currentRoom.isDefault) return
     
     if (!isDeafen) {
-      // 闭听 - 暂停所有远程音�?
+      // 闭听 - 暂停所有远程音 ?
       
       Object.values(remoteAudios).forEach(audio => {
         if (audio && !audio.paused) {
@@ -984,7 +984,7 @@ function App() {
       sessionStorage.setItem('isDeafen', 'true')
       
     } else {
-      // 开�?- 恢复播放所有远程音�?
+      // 开 ?- 恢复播放所有远程音 ?
       
       Object.values(remoteAudios).forEach(audio => {
         if (audio && audio.paused) {
@@ -1009,14 +1009,14 @@ function App() {
       try {
         currentPeer.call(otherUser.peerId, null)
       } catch (error) {
-        console.error('发起呼叫时出�?', error)
+        console.error('发起呼叫时出 ?', error)
       }
     } else {
       
     }
   }
 
-  // WebSocket 连接和事件处�?
+  // WebSocket 连接和事件处 ?
   useEffect(() => {
     if (user) {
       
@@ -1041,13 +1041,13 @@ function App() {
       newSocket.on('connect', () => {
         
         
-        // 发�?join 事件时包�?peerId
+        // 发 ?join 事件时包 ?peerId
         const userWithPeerId = { ...user, peerId: peerId }
         
         newSocket.emit('join', userWithPeerId)
         
         
-        // 如果已经�?peerId，发�?update-peer-id 事件
+        // 如果已经 ?peerId，发 ?update-peer-id 事件
         if (peerId) {
           
           newSocket.emit('update-peer-id', { userId: user.id, peerId: peerId })
@@ -1113,8 +1113,8 @@ function App() {
           initiateCalls(localStreamRef.current, users)
         }
         
-        // 同时更新当前房间的状态，确保状态同�?
-        // 使用 ref 获取最新的 currentRoom，避免闭包问�?
+        // 同时更新当前房间的状态，确保状态同 ?
+        // 使用 ref 获取最新的 currentRoom，避免闭包问 ?
         if (latestCurrentRoom) {
           
           
@@ -1128,7 +1128,7 @@ function App() {
               if (updatedRoom) {
                 
                 
-                // 确保 isDefault 属性存�?
+                // 确保 isDefault 属性存 ?
                 const roomWithIsDefault = { ...updatedRoom, isDefault: updatedRoom.isDefault || false }
                 
                 setCurrentRoom(roomWithIsDefault)
@@ -1154,7 +1154,7 @@ function App() {
           .then(res => res.json())
           .then(updatedRooms => {
             setRooms(sortRooms(updatedRooms))
-            // 只有当当前在被删除的房间中时，才切换到大�?
+            // 只有当当前在被删除的房间中时，才切换到大 ?
             if (currentRoom && currentRoom.id === data.roomId) {
               // 找到默认大厅房间
               const sortedRooms = sortRooms(updatedRooms)
@@ -1219,7 +1219,7 @@ function App() {
         fetchUsers()
       })
 
-      // 监听用户状态更新事�?
+      // 监听用户状态更新事 ?
       newSocket.on('user_status_updated', (updatedUser) => {
         
         setUsers(prevUsers => prevUsers.map(user => 
@@ -1230,15 +1230,15 @@ function App() {
       // 监听用户离开消息
       newSocket.on('user_left', (data) => {
         
-        // 不再调用fetchRooms()，完全依赖roomUsersUpdated事件来更新状�?
-        // 这样可以避免用旧的房间列表覆盖新的状�?
+        // 不再调用fetchRooms()，完全依赖roomUsersUpdated事件来更新状 ?
+        // 这样可以避免用旧的房间列表覆盖新的状 ?
       })
 
-      // 监听新消�?
+      // 监听新消 ?
       newSocket.on('new_message', (message) => {
         
         setMessages(prev => [...prev, message])
-        // 自动滚动到底�?
+        // 自动滚动到底 ?
         setTimeout(() => {
           const chatMessages = document.querySelector('.chat-messages')
           if (chatMessages) {
@@ -1494,7 +1494,7 @@ function App() {
 
             <div className="rooms-grid">
               {rooms.map((room) => {
-                // 按房间状态计算颜�?
+                // 按房间状态计算颜 ?
                 let roomColor = statusColors.default;
                 if (room.isDefault) {
                   roomColor = statusColors.lobby;
@@ -1526,7 +1526,7 @@ function App() {
                   return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
                 }
                 
-                // 获取房间计时（使用后端返回的数据�?
+                // 获取房间计时（使用后端返回的数据 ?
                 const roomTimer = room.timer || 0
                 const showTimer = !room.isDefault && (room.status === 'matching' || room.status === 'gaming')
                 
