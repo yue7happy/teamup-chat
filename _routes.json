@@ -1,11 +1,5 @@
 {
   "version": 1,
-  "include": ["/*"],
-  "exclude": [],
-  "routes": [
-    {
-      "pattern": "/api/*",
-      "function": "api/[[path]].js"
-    }
-  ]
+  "include": ["/api/*"],
+  "exclude": []
 }
