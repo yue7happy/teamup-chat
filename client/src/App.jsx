@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import io from 'socket.io-client'
 import './App.css'
 
-const API_URL = '';
+const API_URL = 'https://api.yue7happy.workers.dev/api';
 
 const statusColors = {
   matching: '#ea4335',
@@ -1029,7 +1029,7 @@ function App() {
         socket.close()
       }
       
-      const newSocket = io('https://teamup-api.yue7happy.workers.dev', {
+      const newSocket = io('https://api.yue7happy.workers.dev', {
         transports: ['websocket'],
         reconnection: true,
         reconnectionAttempts: 5,
